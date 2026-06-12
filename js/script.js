@@ -1,4 +1,5 @@
 const weddingDate = new Date("2026-12-19T16:00:00+13:00");
+const rsvpDeadline = new Date("2026-10-17T00:00:00+13:00");
 const units = ["days", "hours", "minutes", "seconds"];
 
 const menuToggle = document.querySelector(".menu-toggle");
@@ -56,6 +57,28 @@ function updateCountdown() {
 
 updateCountdown();
 setInterval(updateCountdown, 1_000);
+
+function updateRsvpCountdown() {
+    const remaining = Math.max(rsvpDeadline.getTime() - Date.now(), 0);
+    const values = {
+        days: Math.floor(remaining / 86_400_000),
+        hours: Math.floor((remaining % 86_400_000) / 3_600_000),
+        minutes: Math.floor((remaining % 3_600_000) / 60_000),
+        seconds: Math.floor((remaining % 60_000) / 1_000)
+    };
+
+    units.forEach((unit) => {
+        document.getElementById(`rsvp-${unit}`).textContent = values[unit];
+    });
+
+    if (remaining === 0) {
+        document.getElementById("rsvp-form").classList.add("is-closed");
+        document.getElementById("rsvp-closed-message").hidden = false;
+    }
+}
+
+updateRsvpCountdown();
+setInterval(updateRsvpCountdown, 1_000);
 
 function normalizeCode(value) {
     return value.trim().toUpperCase();

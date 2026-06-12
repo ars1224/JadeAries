@@ -649,6 +649,55 @@ address {
     margin-bottom: 24px;
 }
 
+.rsvp-deadline {
+    border-top: 1px solid var(--line);
+    margin-top: 34px;
+    padding-top: 28px;
+}
+
+.deadline-timer {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(4, minmax(58px, 1fr));
+    margin-top: 18px;
+}
+
+.deadline-timer div {
+    background: rgba(255, 253, 251, 0.72);
+    border: 1px solid var(--line);
+    padding: 13px 6px;
+    text-align: center;
+}
+
+.deadline-timer span {
+    color: var(--rose-dark);
+    display: block;
+    font-family: var(--serif);
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    line-height: 1;
+}
+
+.deadline-timer small {
+    color: var(--muted);
+    display: block;
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+    margin-top: 6px;
+    text-transform: uppercase;
+}
+
+.rsvp-closed-message {
+    color: var(--rose-dark);
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    font-style: italic;
+    margin-top: 18px;
+}
+
+form.is-closed {
+    display: none;
+}
+
 form {
     background: var(--paper);
     border: 1px solid var(--line);
@@ -942,6 +991,10 @@ footer small {
 
     .code-entry .secondary-button {
         width: 100%;
+    }
+
+    .deadline-timer {
+        gap: 5px;
     }
 
     .event-date,
