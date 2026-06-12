@@ -1,7 +1,20 @@
 const weddingDate = new Date("2026-12-19T16:00:00+13:00");
 const units = ["days", "hours", "minutes", "seconds"];
+
 const menuToggle = document.querySelector(".menu-toggle");
 const mainNavigation = document.getElementById("main-navigation");
+
+const rsvpForm = document.getElementById("rsvp-form");
+const codeInput = document.getElementById("rsvp-code");
+const validateCodeButton = document.getElementById("validate-code");
+const changeCodeButton = document.getElementById("change-code");
+const codeStep = document.getElementById("code-step");
+const guestStep = document.getElementById("guest-step");
+const guestCheckboxes = document.getElementById("guest-checkboxes");
+const seatSummary = document.getElementById("seat-summary");
+const codeError = document.getElementById("code-error");
+
+let activeInvitation = null;
 
 function closeNavigation() {
     menuToggle.setAttribute("aria-expanded", "false");
@@ -28,6 +41,7 @@ window.addEventListener("resize", () => {
 
 function updateCountdown() {
     const remaining = Math.max(weddingDate.getTime() - Date.now(), 0);
+
     const values = {
         days: Math.floor(remaining / 86_400_000),
         hours: Math.floor((remaining % 86_400_000) / 3_600_000),
@@ -42,41 +56,6 @@ function updateCountdown() {
 
 updateCountdown();
 setInterval(updateCountdown, 1_000);
-
-const guestList = {
-    ARS123: {
-        names: ["Aries Tayao", "Charmnie Gulay"],
-        maxSeats: 2
-    },
-    FAM001: {
-        names: ["Juan Dela Cruz", "Maria Dela Cruz", "Pedro Dela Cruz"],
-        maxSeats: 3
-    },
-    SOLO01: {
-        names: ["Aileen David"],
-        maxSeats: 1
-    }
-};
-
-const rsvpForm = document.getElementById("rsvp-form");
-const codeInput = document.getElementById("rsvp-code");
-const validateCodeButton = document.getElementById("validate-code");
-const changeCodeButton = document.getElementById("change-code");
-const codeStep = document.getElementById("code-step");
-const guestStep = document.getElementById("guest-step");
-const guestCheckboxes = document.getElementById("guest-checkboxes");
-const seatSummary = document.getElementById("seat-summary");
-const codeError = document.getElementById("code-error");
-
-const hiddenFields = {
-    code: document.getElementById("rsvp-code-field"),
-    invitedNames: document.getElementById("invited-names-field"),
-    attendingNames: document.getElementById("attending-names-field"),
-    attendingCount: document.getElementById("attending-count-field"),
-    attendanceStatus: document.getElementById("attendance-status-field")
-};
-
-let activeInvitation = null;
 
 function normalizeCode(value) {
     return value.trim().toUpperCase();
@@ -115,38 +94,58 @@ function renderGuestOptions(code, invitation) {
 
     const seatWord = invitation.maxSeats === 1 ? "seat" : "seats";
     seatSummary.textContent = `This invitation includes up to ${invitation.maxSeats} ${seatWord}.`;
-    hiddenFields.code.value = code;
-    hiddenFields.invitedNames.value = invitation.names.join(", ");
 }
 
-function validateInvitationCode() {
+async function validateInvitationCode() {
     const code = normalizeCode(codeInput.value);
-    const invitation = guestList[code];
 
     clearCodeError();
 
-    if (!invitation) {
-        showCodeError("We could not find that invitation code. Please check it and try again.");
+    if (!code) {
+        showCodeError("Please enter your invitation code.");
         return;
     }
 
-    activeInvitation = invitation;
-    codeInput.value = code;
-    renderGuestOptions(code, invitation);
-    codeStep.hidden = true;
-    guestStep.hidden = false;
-    guestStep.querySelector("input")?.focus();
+    try {
+        validateCodeButton.textContent = "Checking...";
+        validateCodeButton.disabled = true;
+
+        const response = await fetch(`/.netlify/functions/getGuests?code=${encodeURIComponent(code)}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+            showCodeError(data.error || "Invitation code not found.");
+            return;
+        }
+
+        activeInvitation = {
+            code: data.code,
+            names: data.guests.map((guest) => guest.name),
+            maxSeats: data.guests.length
+        };
+
+        codeInput.value = data.code;
+        renderGuestOptions(data.code, activeInvitation);
+
+        codeStep.hidden = true;
+        guestStep.hidden = false;
+        guestStep.querySelector("input")?.focus();
+    } catch (error) {
+        showCodeError("Something went wrong. Please try again.");
+    } finally {
+        validateCodeButton.textContent = "Find Invitation";
+        validateCodeButton.disabled = false;
+    }
 }
 
 function resetInvitationCode() {
     activeInvitation = null;
     rsvpForm.reset();
     guestCheckboxes.replaceChildren();
-    Object.values(hiddenFields).forEach((field) => {
-        field.value = "";
-    });
+
     guestStep.hidden = true;
     codeStep.hidden = false;
+
     clearCodeError();
     codeInput.focus();
 }
@@ -167,9 +166,10 @@ codeInput.addEventListener("keydown", (event) => {
 
 changeCodeButton.addEventListener("click", resetInvitationCode);
 
-rsvpForm.addEventListener("submit", (event) => {
+rsvpForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
     if (!activeInvitation) {
-        event.preventDefault();
         showCodeError("Please enter and validate your invitation code first.");
         return;
     }
@@ -179,8 +179,40 @@ rsvpForm.addEventListener("submit", (event) => {
         (checkbox) => checkbox.value
     );
 
-    const attendingCount = Math.min(selectedNames.length, activeInvitation.maxSeats);
-    hiddenFields.attendingNames.value = selectedNames.slice(0, attendingCount).join(", ");
-    hiddenFields.attendingCount.value = String(attendingCount);
-    hiddenFields.attendanceStatus.value = attendingCount > 0 ? "attending" : "declined";
+    const submitButton = rsvpForm.querySelector('button[type="submit"]');
+
+    try {
+        submitButton.textContent = "Sending...";
+        submitButton.disabled = true;
+
+        const response = await fetch("/.netlify/functions/updateRsvp", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                code: activeInvitation.code,
+                attendingGuests: selectedNames
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert(data.error || "Could not save RSVP.");
+            submitButton.textContent = "Send RSVP";
+            submitButton.disabled = false;
+            return;
+        }
+
+        guestStep.innerHTML = `
+            <p class="eyebrow">Thank you</p>
+            <h3>Your RSVP has been received.</h3>
+            <p class="form-help">We are grateful for your response.</p>
+        `;
+    } catch (error) {
+        alert("Something went wrong. Please try again.");
+        submitButton.textContent = "Send RSVP";
+        submitButton.disabled = false;
+    }
 });
