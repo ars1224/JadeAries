@@ -1,5 +1,30 @@
 const weddingDate = new Date("2026-12-19T16:00:00+13:00");
 const units = ["days", "hours", "minutes", "seconds"];
+const menuToggle = document.querySelector(".menu-toggle");
+const mainNavigation = document.getElementById("main-navigation");
+
+function closeNavigation() {
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.setAttribute("aria-label", "Open navigation");
+    mainNavigation.classList.remove("is-open");
+}
+
+menuToggle.addEventListener("click", () => {
+    const isOpen = menuToggle.getAttribute("aria-expanded") === "true";
+    menuToggle.setAttribute("aria-expanded", String(!isOpen));
+    menuToggle.setAttribute("aria-label", isOpen ? "Open navigation" : "Close navigation");
+    mainNavigation.classList.toggle("is-open", !isOpen);
+});
+
+mainNavigation.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", closeNavigation);
+});
+
+window.addEventListener("resize", () => {
+    if (window.innerWidth > 760) {
+        closeNavigation();
+    }
+});
 
 function updateCountdown() {
     const remaining = Math.max(weddingDate.getTime() - Date.now(), 0);
