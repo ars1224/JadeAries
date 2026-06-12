@@ -40,6 +40,147 @@ window.addEventListener("resize", () => {
     }
 });
 
+const invitationPages = document.querySelectorAll(".invitation-page");
+const invitationCarousel = document.querySelector(".invitation-carousel");
+const invitationTrack = document.getElementById("invitation-track");
+const invitationDots = Array.from(document.querySelectorAll(".invitation-dots button"));
+const invitationPrevious = document.querySelector(".invitation-previous");
+const invitationNext = document.querySelector(".invitation-next");
+const invitationLightbox = document.getElementById("invitation-lightbox");
+const lightboxImage = document.getElementById("lightbox-image");
+const lightboxTitle = document.getElementById("lightbox-title");
+let lastFocusedInvitation = null;
+let activeInvitationPage = 0;
+let invitationTouchStartX = 0;
+let invitationAutoplay = null;
+
+function positionInvitationCarousel() {
+    const pages = Array.from(invitationPages);
+    const activePage = pages[activeInvitationPage];
+    const viewport = invitationCarousel.querySelector(".invitation-viewport");
+    const offset = (viewport.clientWidth - activePage.offsetWidth) / 2 - activePage.offsetLeft;
+
+    invitationTrack.style.transform = `translateX(${offset}px)`;
+
+    pages.forEach((page, index) => {
+        page.classList.toggle("is-active", index === activeInvitationPage);
+    });
+
+    invitationDots.forEach((dot, index) => {
+        const isActive = index === activeInvitationPage;
+        dot.classList.toggle("is-active", isActive);
+        dot.setAttribute("aria-current", isActive ? "true" : "false");
+    });
+}
+
+function showInvitationPage(index) {
+    activeInvitationPage = (index + invitationPages.length) % invitationPages.length;
+    positionInvitationCarousel();
+}
+
+function stopInvitationAutoplay() {
+    window.clearInterval(invitationAutoplay);
+    invitationAutoplay = null;
+}
+
+function startInvitationAutoplay() {
+    stopInvitationAutoplay();
+
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        invitationAutoplay = window.setInterval(() => showInvitationPage(activeInvitationPage + 1), 5_000);
+    }
+}
+
+function restartInvitationAutoplay() {
+    stopInvitationAutoplay();
+    startInvitationAutoplay();
+}
+
+function openInvitationLightbox(page) {
+    lastFocusedInvitation = page;
+    lightboxImage.src = page.dataset.fullImage;
+    lightboxImage.alt = page.querySelector("img").alt;
+    lightboxTitle.textContent = page.dataset.title;
+    invitationLightbox.hidden = false;
+    document.body.style.overflow = "hidden";
+    invitationLightbox.querySelector(".lightbox-close").focus();
+}
+
+function closeInvitationLightbox() {
+    invitationLightbox.hidden = true;
+    lightboxImage.src = "";
+    document.body.style.overflow = "";
+    lastFocusedInvitation?.focus();
+}
+
+invitationPages.forEach((page) => {
+    page.addEventListener("click", () => openInvitationLightbox(page));
+});
+
+invitationPrevious.addEventListener("click", () => {
+    showInvitationPage(activeInvitationPage - 1);
+    restartInvitationAutoplay();
+});
+
+invitationNext.addEventListener("click", () => {
+    showInvitationPage(activeInvitationPage + 1);
+    restartInvitationAutoplay();
+});
+
+invitationDots.forEach((dot, index) => {
+    dot.addEventListener("click", () => {
+        showInvitationPage(index);
+        restartInvitationAutoplay();
+    });
+});
+
+invitationCarousel.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+        showInvitationPage(activeInvitationPage - 1);
+        restartInvitationAutoplay();
+    }
+
+    if (event.key === "ArrowRight") {
+        showInvitationPage(activeInvitationPage + 1);
+        restartInvitationAutoplay();
+    }
+});
+
+invitationCarousel.addEventListener("touchstart", (event) => {
+    stopInvitationAutoplay();
+    invitationTouchStartX = event.changedTouches[0].clientX;
+}, { passive: true });
+
+invitationCarousel.addEventListener("touchend", (event) => {
+    const distance = event.changedTouches[0].clientX - invitationTouchStartX;
+
+    if (Math.abs(distance) >= 45) {
+        showInvitationPage(activeInvitationPage + (distance < 0 ? 1 : -1));
+    }
+
+    startInvitationAutoplay();
+}, { passive: true });
+
+invitationCarousel.addEventListener("mouseenter", stopInvitationAutoplay);
+invitationCarousel.addEventListener("mouseleave", startInvitationAutoplay);
+invitationCarousel.addEventListener("focusin", stopInvitationAutoplay);
+invitationCarousel.addEventListener("focusout", startInvitationAutoplay);
+
+invitationLightbox.querySelectorAll("[data-close-lightbox]").forEach((control) => {
+    control.addEventListener("click", closeInvitationLightbox);
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !invitationLightbox.hidden) {
+        closeInvitationLightbox();
+    }
+});
+
+window.addEventListener("resize", positionInvitationCarousel);
+
+positionInvitationCarousel();
+startInvitationAutoplay();
+
 function updateCountdown() {
     const remaining = Math.max(weddingDate.getTime() - Date.now(), 0);
 

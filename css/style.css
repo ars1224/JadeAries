@@ -416,6 +416,61 @@ h2 {
     opacity: 0.72;
 }
 
+.our-story {
+    background:
+        linear-gradient(145deg, rgba(247, 201, 214, 0.14), transparent 35%),
+        var(--cream);
+}
+
+.memory-strip {
+    display: grid;
+    gap: clamp(10px, 1.5vw, 18px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: auto;
+    max-width: 1180px;
+}
+
+.memory-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 45px rgba(116, 66, 80, 0.1);
+    overflow: hidden;
+    padding: 7px;
+}
+
+.memory-card img {
+    aspect-ratio: 3 / 4;
+    display: block;
+    height: auto;
+    object-fit: cover;
+    width: 100%;
+}
+
+.memory-card:nth-child(1) img {
+    object-position: center;
+}
+
+.memory-card:nth-child(2) img {
+    object-position: center 42%;
+}
+
+.memory-card:nth-child(3) img {
+    object-position: center 68%;
+}
+
+.memory-card:nth-child(4) img {
+    object-position: center 62%;
+}
+
+.story-note {
+    color: var(--rose);
+    font-family: var(--serif);
+    font-size: clamp(1.35rem, 3vw, 2rem);
+    font-style: italic;
+    margin-top: 38px;
+    text-align: center;
+}
+
 .timer {
     display: grid;
     gap: 1px;
@@ -513,6 +568,204 @@ address {
     padding-bottom: 2px;
     text-decoration: none;
     text-transform: uppercase;
+}
+
+.invitation-gallery {
+    background:
+        linear-gradient(135deg, rgba(247, 201, 214, 0.14), transparent 38%),
+        linear-gradient(315deg, rgba(212, 189, 255, 0.14), transparent 38%),
+        var(--paper);
+}
+
+.gallery-intro {
+    color: var(--muted);
+    margin: 20px auto 0;
+    max-width: 560px;
+}
+
+.invitation-carousel {
+    margin: auto;
+    max-width: 1180px;
+    position: relative;
+}
+
+.invitation-viewport {
+    overflow: hidden;
+    padding: 30px 0 42px;
+}
+
+.invitation-track {
+    align-items: center;
+    display: flex;
+    gap: clamp(14px, 2vw, 24px);
+    transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.invitation-page {
+    background: white;
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 48px rgba(116, 66, 80, 0.1);
+    color: var(--rose);
+    cursor: zoom-in;
+    flex: 0 0 min(46vw, 430px);
+    opacity: 0.35;
+    padding: 12px;
+    transform: scale(0.86);
+    transition: box-shadow 420ms ease, opacity 420ms ease, transform 420ms ease;
+    width: 100%;
+}
+
+.invitation-page.is-active {
+    box-shadow: 0 28px 70px rgba(116, 66, 80, 0.17);
+    opacity: 1;
+    transform: scale(1);
+}
+
+.invitation-page:hover,
+.invitation-page.is-active:hover {
+    background: white;
+    box-shadow: 0 24px 60px rgba(116, 66, 80, 0.16);
+    color: var(--rose);
+}
+
+.invitation-page img {
+    display: block;
+    height: auto;
+    width: 100%;
+}
+
+.invitation-page span {
+    display: block;
+    color: var(--rose);
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    padding: 15px 8px 5px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.invitation-arrow {
+    align-items: center;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--rose-dark);
+    display: flex;
+    font: 400 1.35rem var(--serif);
+    height: 46px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    top: 48%;
+    transform: translateY(-50%);
+    width: 46px;
+    z-index: 4;
+}
+
+.invitation-arrow:hover {
+    background: var(--rose-dark);
+    color: white;
+    transform: translateY(-50%);
+}
+
+.invitation-previous {
+    left: 18px;
+}
+
+.invitation-next {
+    right: 18px;
+}
+
+.invitation-dots {
+    display: flex;
+    gap: 9px;
+    justify-content: center;
+}
+
+.invitation-dots button {
+    background: transparent;
+    border: 1px solid var(--rose-soft);
+    border-radius: 50%;
+    height: 10px;
+    padding: 0;
+    width: 10px;
+}
+
+.invitation-dots button.is-active {
+    background: var(--rose);
+}
+
+.invitation-dots button:hover {
+    background: var(--rose-soft);
+    transform: none;
+}
+
+.lightbox {
+    align-items: center;
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 24px;
+    position: fixed;
+    z-index: 100;
+}
+
+.lightbox[hidden] {
+    display: none;
+}
+
+.lightbox-backdrop {
+    background: rgba(47, 31, 36, 0.88);
+    inset: 0;
+    position: absolute;
+}
+
+.lightbox-content {
+    background: var(--paper);
+    box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+    max-height: calc(100vh - 48px);
+    max-width: min(860px, calc(100vw - 48px));
+    overflow: auto;
+    padding: 14px;
+    position: relative;
+    text-align: center;
+    z-index: 1;
+}
+
+.lightbox-content img {
+    display: block;
+    height: auto;
+    max-height: calc(100vh - 120px);
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.lightbox-content p {
+    color: var(--rose);
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    padding: 12px 45px 2px;
+    text-transform: uppercase;
+}
+
+.lightbox-close {
+    align-items: center;
+    background: var(--rose-dark);
+    border: 0;
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    font-size: 1.5rem;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    width: 38px;
+    z-index: 2;
 }
 
 .guest-guide {
@@ -979,10 +1232,69 @@ footer small {
         grid-template-columns: repeat(2, minmax(110px, 1fr));
     }
 
+    .memory-strip {
+        display: flex;
+        gap: 12px;
+        margin-left: -24px;
+        margin-right: -24px;
+        overflow-x: auto;
+        padding: 8px 24px 20px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+    }
+
+    .memory-card {
+        flex: 0 0 min(62vw, 250px);
+        padding: 7px;
+        scroll-snap-align: start;
+    }
+
+    .memory-card img {
+        height: auto;
+    }
+
     .event-card,
     .details-grid,
     .rsvp-inner {
         grid-template-columns: 1fr;
+    }
+
+    .invitation-viewport {
+        margin-left: -12px;
+        margin-right: -12px;
+        padding-bottom: 34px;
+    }
+
+    .invitation-page {
+        flex-basis: min(72vw, 330px);
+        padding: 8px;
+    }
+
+    .invitation-arrow {
+        height: 40px;
+        width: 40px;
+    }
+
+    .invitation-previous {
+        left: 2px;
+    }
+
+    .invitation-next {
+        right: 2px;
+    }
+
+    .lightbox {
+        padding: 12px;
+    }
+
+    .lightbox-content {
+        max-height: calc(100vh - 24px);
+        max-width: calc(100vw - 24px);
+        padding: 8px;
+    }
+
+    .lightbox-content img {
+        max-height: calc(100vh - 90px);
     }
 
     .code-entry {
