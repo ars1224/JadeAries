@@ -258,6 +258,67 @@ nav a {
     transform: scale(-1);
 }
 
+.page-florals {
+    height: 100vh;
+    opacity: 0.38;
+    pointer-events: none;
+    position: fixed;
+    top: 0;
+    width: 110px;
+    z-index: 5;
+}
+
+.page-florals::before {
+    border-left: 2px solid rgba(100, 132, 85, 0.38);
+    border-radius: 50%;
+    content: "";
+    height: 92%;
+    left: 50%;
+    position: absolute;
+    top: 4%;
+    transform: rotate(2deg);
+    width: 48px;
+}
+
+.page-florals-left {
+    left: -22px;
+}
+
+.page-florals-right {
+    right: -22px;
+    transform: scaleX(-1);
+}
+
+.page-florals .css-flower:nth-child(1) {
+    left: 48%;
+    top: 13%;
+    transform: scale(0.65);
+}
+
+.page-florals .css-flower:nth-child(2) {
+    left: 25%;
+    top: 31%;
+    transform: rotate(-22deg) scale(0.8);
+}
+
+.page-florals .css-flower:nth-child(3) {
+    left: 55%;
+    top: 49%;
+    transform: rotate(18deg) scale(0.62);
+}
+
+.page-florals .css-flower:nth-child(4) {
+    left: 22%;
+    top: 67%;
+    transform: rotate(-16deg) scale(0.75);
+}
+
+.page-florals .css-flower:nth-child(5) {
+    left: 52%;
+    top: 84%;
+    transform: rotate(24deg) scale(0.68);
+}
+
 .hero-content {
     max-width: 900px;
     position: relative;
@@ -993,6 +1054,56 @@ button {
     width: 100%;
 }
 
+.music-toggle {
+    align-items: center;
+    background: rgba(255, 253, 251, 0.94);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    bottom: 24px;
+    box-shadow: 0 12px 35px rgba(116, 66, 80, 0.18);
+    color: var(--rose-dark);
+    display: flex;
+    gap: 9px;
+    padding: 11px 17px;
+    position: fixed;
+    right: 24px;
+    width: auto;
+    z-index: 30;
+}
+
+.music-toggle:hover,
+.music-toggle.is-playing {
+    background: var(--rose-dark);
+    color: white;
+}
+
+.music-toggle:hover {
+    transform: translateY(-2px);
+}
+
+.music-icon {
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.music-toggle.is-playing .music-icon {
+    animation: music-pulse 1.6s ease-in-out infinite;
+}
+
+.music-label {
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+@keyframes music-pulse {
+    50% {
+        transform: scale(1.18);
+    }
+}
+
 .code-entry {
     align-items: stretch;
     display: grid;
@@ -1346,6 +1457,29 @@ footer small {
         height: 125px;
         opacity: 0.45;
         width: 125px;
+    }
+
+    .page-florals {
+        opacity: 0.2;
+        width: 70px;
+    }
+
+    .page-florals-left {
+        left: -32px;
+    }
+
+    .page-florals-right {
+        right: -32px;
+    }
+
+    .music-toggle {
+        bottom: 14px;
+        padding: 11px;
+        right: 14px;
+    }
+
+    .music-label {
+        display: none;
     }
 }
 

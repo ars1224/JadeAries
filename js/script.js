@@ -4,6 +4,9 @@ const units = ["days", "hours", "minutes", "seconds"];
 
 const menuToggle = document.querySelector(".menu-toggle");
 const mainNavigation = document.getElementById("main-navigation");
+const weddingMusic = document.getElementById("wedding-music");
+const musicToggle = document.getElementById("music-toggle");
+const musicLabel = musicToggle.querySelector(".music-label");
 
 const rsvpForm = document.getElementById("rsvp-form");
 const codeInput = document.getElementById("rsvp-code");
@@ -16,6 +19,30 @@ const seatSummary = document.getElementById("seat-summary");
 const codeError = document.getElementById("code-error");
 
 let activeInvitation = null;
+
+function updateMusicControl(isPlaying) {
+    musicToggle.classList.toggle("is-playing", isPlaying);
+    musicToggle.setAttribute("aria-pressed", String(isPlaying));
+    musicToggle.setAttribute("aria-label", isPlaying ? "Pause wedding music" : "Play wedding music");
+    musicLabel.textContent = isPlaying ? "Pause music" : "Play music";
+}
+
+musicToggle.addEventListener("click", async () => {
+    if (weddingMusic.paused) {
+        try {
+            await weddingMusic.play();
+            updateMusicControl(true);
+        } catch {
+            updateMusicControl(false);
+        }
+    } else {
+        weddingMusic.pause();
+        updateMusicControl(false);
+    }
+});
+
+weddingMusic.addEventListener("play", () => updateMusicControl(true));
+weddingMusic.addEventListener("pause", () => updateMusicControl(false));
 
 function closeNavigation() {
     menuToggle.setAttribute("aria-expanded", "false");

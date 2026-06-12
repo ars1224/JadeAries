@@ -11,6 +11,21 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <div class="page-florals page-florals-left" aria-hidden="true">
+        <i class="css-flower flower-pink"></i>
+        <i class="css-flower flower-blue"></i>
+        <i class="css-flower flower-yellow"></i>
+        <i class="css-flower flower-purple"></i>
+        <i class="css-flower flower-peach"></i>
+    </div>
+    <div class="page-florals page-florals-right" aria-hidden="true">
+        <i class="css-flower flower-purple"></i>
+        <i class="css-flower flower-peach"></i>
+        <i class="css-flower flower-pink"></i>
+        <i class="css-flower flower-yellow"></i>
+        <i class="css-flower flower-blue"></i>
+    </div>
+
     <header class="site-header">
         <a class="monogram" href="#home" aria-label="Jhon Aries and Charmnie Jade — back to top">
             <img src="img/19 . 12. 2026 (1).png" alt="Jhon Aries and Charmnie Jade monogram">
@@ -400,6 +415,23 @@
         <p>Jhon Aries <span>&amp;</span> Charmnie Jade</p>
         <small>19 · 12 · 2026</small>
     </footer>
+
+    <audio
+        id="wedding-music"
+        src="Audio/Goodness%20Of%20God%20(Wedding%20Version)%20-%20Bethel%20Music%20-%20Violin%20Cover.mp3"
+        preload="metadata"
+        loop
+    ></audio>
+    <button
+        id="music-toggle"
+        class="music-toggle"
+        type="button"
+        aria-label="Play wedding music"
+        aria-pressed="false"
+    >
+        <span class="music-icon" aria-hidden="true">♪</span>
+        <span class="music-label">Play music</span>
+    </button>
 
     <script src="js/script.js"></script>
 </body>
