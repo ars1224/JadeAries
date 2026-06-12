@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/ars1224/JadeAries/issues"
   },
-  "homepage": "https://github.com/ars1224/JadeAries#readme"
+  "homepage": "https://github.com/ars1224/JadeAries#readme",
+  "dependencies": {
+    "googleapis": "^173.0.0"
+  }
 }
