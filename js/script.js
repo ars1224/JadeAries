@@ -7,6 +7,7 @@ const mainNavigation = document.getElementById("main-navigation");
 const weddingMusic = document.getElementById("wedding-music");
 const musicToggle = document.getElementById("music-toggle");
 const musicLabel = musicToggle.querySelector(".music-label");
+weddingMusic.volume = 0.45;
 
 const rsvpForm = document.getElementById("rsvp-form");
 const codeInput = document.getElementById("rsvp-code");
