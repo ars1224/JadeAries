@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Guest Manager | Jhon Aries &amp; Charmnie Jade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <main class="admin-shell">
+        <section id="login-view" class="login-card">
+            <p class="eyebrow">Private access</p>
+            <h1>Guest Manager</h1>
+            <p>Enter your admin password to manage invitation codes.</p>
+            <form id="login-form">
+                <label for="admin-password">Admin password</label>
+                <input id="admin-password" type="password" autocomplete="current-password" required>
+                <button type="submit">Unlock Manager</button>
+                <p id="login-error" class="message error" role="alert" hidden></p>
+            </form>
+        </section>
+
+        <section id="manager-view" class="manager" hidden>
+            <header class="manager-header">
+                <div>
+                    <p class="eyebrow">Wedding administration</p>
+                    <h1>Guest Codes</h1>
+                </div>
+                <div class="header-actions">
+                    <a href="index.html">View website</a>
+                    <button id="logout-button" class="button-secondary" type="button">Lock</button>
+                </div>
+            </header>
+
+            <section class="panel add-panel">
+                <div>
+                    <p class="eyebrow">New invitation</p>
+                    <h2>Add Guest Code</h2>
+                </div>
+                <form id="add-code-form" class="add-form">
+                    <label for="new-code">Invitation code</label>
+                    <input id="new-code" type="text" maxlength="12" placeholder="e.g. FAM002" required>
+
+                    <label for="new-names">Guest names</label>
+                    <textarea id="new-names" rows="4" placeholder="One guest name per line" required></textarea>
+
+                    <button type="submit">Add Invitation</button>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="toolbar">
+                    <div>
+                        <p class="eyebrow">Guest list</p>
+                        <h2>Manage Invitations</h2>
+                    </div>
+                    <label class="search-field">
+                        <span>Search</span>
+                        <input id="guest-search" type="search" placeholder="Code, name, or status">
+                    </label>
+                </div>
+
+                <p id="manager-message" class="message" role="status" hidden></p>
+                <div id="guest-list" class="guest-list"></div>
+                <p id="empty-state" class="empty-state" hidden>No matching guests found.</p>
+            </section>
+        </section>
+    </main>
+
+    <template id="guest-row-template">
+        <article class="guest-row">
+            <div class="field">
+                <label>Code</label>
+                <input class="row-code" type="text" maxlength="12">
+            </div>
+            <div class="field guest-name-field">
+                <label>Guest name</label>
+                <input class="row-name" type="text">
+            </div>
+            <div class="field">
+                <label>Status</label>
+                <select class="row-status">
+                    <option>Pending</option>
+                    <option>Attending</option>
+                    <option>Declined</option>
+                </select>
+            </div>
+            <div class="row-actions">
+                <button class="save-row" type="button">Save</button>
+                <button class="delete-row button-danger" type="button">Delete</button>
+            </div>
+        </article>
+    </template>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
