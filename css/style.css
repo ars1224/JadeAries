@@ -24,6 +24,7 @@
 
 html {
     scroll-behavior: smooth;
+    scroll-padding-top: 90px;
 }
 
 body {
@@ -47,10 +48,13 @@ a {
     justify-content: space-between;
     left: 0;
     padding: 16px clamp(24px, 5vw, 72px);
-    position: absolute;
+    position: fixed;
     right: 0;
     top: 0;
     z-index: 10;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 24px rgba(116, 66, 80, 0.06);
 }
 
 .monogram {
@@ -616,7 +620,7 @@ form {
     padding: clamp(30px, 5vw, 55px);
 }
 
-label {
+form label {
     color: var(--rose-dark);
     display: block;
     font-size: 0.65rem;
@@ -626,13 +630,12 @@ label {
     text-transform: uppercase;
 }
 
-label span {
+form label span {
     color: var(--muted);
     font-weight: 300;
 }
 
-input,
-select {
+.text-input {
     appearance: none;
     background: transparent;
     border: 0;
@@ -640,19 +643,154 @@ select {
     border-radius: 0;
     color: var(--ink);
     font: 300 1rem var(--sans);
-    margin-bottom: 26px;
     outline: none;
     padding: 10px 2px;
     width: 100%;
 }
 
-input:focus,
-select:focus {
+.text-input:focus {
     border-color: var(--rose);
 }
 
 button {
     width: 100%;
+}
+
+.code-entry {
+    align-items: stretch;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.code-entry .secondary-button {
+    padding-left: 22px;
+    padding-right: 22px;
+    width: auto;
+}
+
+.form-help,
+.decline-note {
+    color: var(--muted);
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-style: italic;
+    margin-top: 12px;
+}
+
+.form-message {
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin-top: 14px;
+}
+
+.form-error {
+    color: #9c3f55;
+}
+
+.guest-step h3 {
+    color: var(--rose-dark);
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.15;
+    margin: 10px 0 4px;
+}
+
+fieldset {
+    border: 0;
+    margin: 28px 0 22px;
+}
+
+.guest-checkboxes {
+    display: grid;
+    gap: 12px;
+}
+
+.guest-option {
+    align-items: center;
+    background: var(--cream);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    display: flex;
+    gap: 14px;
+    margin: 0;
+    padding: 16px 18px;
+    transition: border-color 180ms ease, background 180ms ease;
+}
+
+.guest-option:hover,
+.guest-option:has(input:checked) {
+    background: rgba(247, 201, 214, 0.2);
+    border-color: var(--rose-soft);
+}
+
+.guest-option input {
+    appearance: none;
+    background: white;
+    border: 1px solid var(--rose-soft);
+    border-radius: 50%;
+    display: grid;
+    flex: 0 0 22px;
+    height: 22px;
+    margin: 0;
+    place-content: center;
+    width: 22px;
+}
+
+.guest-option input::before {
+    background: var(--rose);
+    border-radius: 50%;
+    content: "";
+    height: 12px;
+    transform: scale(0);
+    transition: transform 160ms ease;
+    width: 12px;
+}
+
+.guest-option input:checked::before {
+    transform: scale(1);
+}
+
+.guest-option input:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 3px;
+}
+
+.guest-option span {
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.25rem;
+    letter-spacing: 0.01em;
+    text-transform: none;
+}
+
+.decline-note {
+    margin: 0 0 22px;
+}
+
+.text-button {
+    background: transparent;
+    border: 0;
+    color: var(--rose);
+    margin-top: 16px;
+    padding: 6px;
+}
+
+.text-button:hover {
+    background: transparent;
+    color: var(--rose-dark);
+}
+
+.visually-hidden {
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
 }
 
 footer {
@@ -726,6 +864,14 @@ footer small {
     .details-grid,
     .rsvp-inner {
         grid-template-columns: 1fr;
+    }
+
+    .code-entry {
+        grid-template-columns: 1fr;
+    }
+
+    .code-entry .secondary-button {
+        width: 100%;
     }
 
     .event-date,

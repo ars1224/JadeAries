@@ -212,19 +212,47 @@
                     <p>Please reply at your earliest convenience. We cannot wait to celebrate this beautiful day with you.</p>
                 </div>
 
-                <form name="wedding-rsvp" method="POST" data-netlify="true">
+                <form id="rsvp-form" name="wedding-rsvp" method="POST" data-netlify="true">
                     <input type="hidden" name="form-name" value="wedding-rsvp">
-                    <label for="fullname">Full name</label>
-                    <input id="fullname" type="text" name="fullname" autocomplete="name" required>
+                    <input id="rsvp-code-field" type="hidden" name="rsvp_code">
+                    <input id="invited-names-field" type="hidden" name="invited_names">
+                    <input id="attending-names-field" type="hidden" name="attending_names">
+                    <input id="attending-count-field" type="hidden" name="attending_count">
+                    <input id="attendance-status-field" type="hidden" name="attendance_status">
+                    <input type="hidden" name="message" value="">
 
-                    <label for="attendance">Will you attend?</label>
-                    <select id="attendance" name="attendance" required>
-                        <option value="" selected disabled>Please select</option>
-                        <option value="yes">Joyfully accepts</option>
-                        <option value="no">Regretfully declines</option>
-                    </select>
+                    <div id="code-step">
+                        <label for="rsvp-code">Invitation code</label>
+                        <div class="code-entry">
+                            <input
+                                id="rsvp-code"
+                                class="text-input"
+                                type="text"
+                                placeholder="e.g. ARS123"
+                                autocomplete="off"
+                                autocapitalize="characters"
+                                spellcheck="false"
+                                maxlength="12"
+                                required
+                            >
+                            <button id="validate-code" class="secondary-button" type="button">Find Invitation</button>
+                        </div>
+                        <p class="form-help">Enter the RSVP code shown on your invitation.</p>
+                        <p id="code-error" class="form-message form-error" role="alert" hidden></p>
+                    </div>
 
-                    <button type="submit">Send RSVP</button>
+                    <div id="guest-step" class="guest-step" hidden>
+                        <p class="eyebrow">Your invitation</p>
+                        <h3>Who will be attending?</h3>
+                        <p id="seat-summary" class="form-help"></p>
+                        <fieldset>
+                            <legend class="visually-hidden">Select attending guests</legend>
+                            <div id="guest-checkboxes" class="guest-checkboxes"></div>
+                        </fieldset>
+                        <p class="decline-note">Leave all names unticked if nobody can attend.</p>
+                        <button type="submit">Send RSVP</button>
+                        <button id="change-code" class="text-button" type="button">Use a different code</button>
+                    </div>
                 </form>
             </div>
         </section>
