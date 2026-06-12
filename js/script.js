@@ -44,6 +44,35 @@ musicToggle.addEventListener("click", async () => {
 weddingMusic.addEventListener("play", () => updateMusicControl(true));
 weddingMusic.addEventListener("pause", () => updateMusicControl(false));
 
+async function attemptMusicAutoplay() {
+    try {
+        await weddingMusic.play();
+        updateMusicControl(true);
+        return true;
+    } catch {
+        updateMusicControl(false);
+        return false;
+    }
+}
+
+async function playMusicOnFirstInteraction() {
+    if (weddingMusic.paused) {
+        await attemptMusicAutoplay();
+    }
+
+    ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+        document.removeEventListener(eventName, playMusicOnFirstInteraction);
+    });
+}
+
+attemptMusicAutoplay().then((started) => {
+    if (!started) {
+        ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+            document.addEventListener(eventName, playMusicOnFirstInteraction, { once: true });
+        });
+    }
+});
+
 function closeNavigation() {
     menuToggle.setAttribute("aria-expanded", "false");
     menuToggle.setAttribute("aria-label", "Open navigation");
