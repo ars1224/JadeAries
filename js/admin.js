@@ -7,7 +7,6 @@ const passwordInput = document.getElementById("admin-password");
 const loginError = document.getElementById("login-error");
 const logoutButton = document.getElementById("logout-button");
 const addCodeForm = document.getElementById("add-code-form");
-const newCodeInput = document.getElementById("new-code");
 const newNamesInput = document.getElementById("new-names");
 const guestSearch = document.getElementById("guest-search");
 const guestList = document.getElementById("guest-list");
@@ -139,26 +138,19 @@ logoutButton.addEventListener("click", () => {
 addCodeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const names = newNamesInput.value
-        .split(/\r?\n/)
+        .split(/[,\r\n]+/)
         .map((name) => name.trim())
         .filter(Boolean);
 
     try {
         hideMessage();
-        await apiRequest("POST", {
-            code: newCodeInput.value,
-            names
-        });
+        const result = await apiRequest("POST", { names });
         addCodeForm.reset();
-        showMessage("Invitation code added.");
+        showMessage(`Invitation ${result.code} added for ${names.length} guest${names.length === 1 ? "" : "s"}.`);
         await loadGuests();
     } catch (error) {
         showMessage(error.message, true);
     }
-});
-
-newCodeInput.addEventListener("input", () => {
-    newCodeInput.value = newCodeInput.value.toUpperCase();
 });
 
 guestSearch.addEventListener("input", renderGuests);

@@ -42,11 +42,14 @@
                     <h2>Add Guest Code</h2>
                 </div>
                 <form id="add-code-form" class="add-form">
-                    <label for="new-code">Invitation code</label>
-                    <input id="new-code" type="text" maxlength="12" placeholder="e.g. FAM002" required>
+                    <div class="generated-code-note">
+                        <span>Invitation code</span>
+                        <strong>Generated automatically when saved</strong>
+                    </div>
 
                     <label for="new-names">Guest names</label>
-                    <textarea id="new-names" rows="4" placeholder="One guest name per line" required></textarea>
+                    <textarea id="new-names" rows="4" placeholder="Aries Tayao, Charmnie Gulay" required></textarea>
+                    <p class="field-help">Separate multiple guests with a comma or place each name on a new line.</p>
 
                     <button type="submit">Add Invitation</button>
                 </form>

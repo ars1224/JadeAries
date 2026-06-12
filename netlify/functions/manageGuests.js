@@ -46,6 +46,25 @@ function normalizeName(value) {
   return String(value || "").trim();
 }
 
+function generateInvitationCode(existingCodes) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const randomBytes = crypto.randomBytes(6);
+    const suffix = Array.from(
+      randomBytes,
+      (byte) => alphabet[byte % alphabet.length]
+    ).join("");
+    const code = `INV${suffix}`;
+
+    if (!existingCodes.has(code)) {
+      return code;
+    }
+  }
+
+  throw new Error("Could not generate a unique invitation code.");
+}
+
 async function getSheetRows(sheets) {
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -94,23 +113,19 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === "POST") {
       const body = JSON.parse(event.body || "{}");
-      const code = normalizeCode(body.code);
       const names = Array.isArray(body.names)
         ? body.names.map(normalizeName).filter(Boolean)
         : [];
 
-      if (!code || names.length === 0) {
-        return json(400, { error: "A code and at least one guest name are required." });
+      if (names.length === 0) {
+        return json(400, { error: "At least one guest name is required." });
       }
 
       const rows = await getSheetRows(sheets);
-      const codeExists = rows.slice(1).some(
-        (row) => normalizeCode(row[0]) === code
+      const existingCodes = new Set(
+        rows.slice(1).map((row) => normalizeCode(row[0])).filter(Boolean)
       );
-
-      if (codeExists) {
-        return json(409, { error: "That invitation code already exists." });
-      }
+      const code = generateInvitationCode(existingCodes);
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: process.env.GOOGLE_SHEET_ID,
@@ -122,7 +137,7 @@ exports.handler = async (event) => {
         },
       });
 
-      return json(201, { success: true });
+      return json(201, { success: true, code });
     }
 
     if (event.httpMethod === "PUT") {

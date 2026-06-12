@@ -162,6 +162,38 @@ button,
     margin: 0;
 }
 
+.generated-code-note {
+    background: var(--cream);
+    border: 1px solid var(--line);
+    margin-bottom: 20px;
+    padding: 14px;
+}
+
+.generated-code-note span {
+    color: var(--rose);
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+.generated-code-note strong {
+    color: var(--rose-dark);
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    font-weight: 500;
+}
+
+.field-help {
+    color: var(--muted);
+    font-family: var(--serif);
+    font-size: 0.95rem;
+    font-style: italic;
+    margin: -9px 0 18px;
+}
+
 .search-field {
     margin: 0;
     min-width: min(320px, 100%);
