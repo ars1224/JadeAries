@@ -47,22 +47,12 @@ function normalizeName(value) {
 }
 
 function generateInvitationCode(existingCodes) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const highestNumber = Array.from(existingCodes).reduce((highest, code) => {
+    const match = /^DEC19-(\d{3,})$/.exec(code);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
 
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const randomBytes = crypto.randomBytes(6);
-    const suffix = Array.from(
-      randomBytes,
-      (byte) => alphabet[byte % alphabet.length]
-    ).join("");
-    const code = `INV${suffix}`;
-
-    if (!existingCodes.has(code)) {
-      return code;
-    }
-  }
-
-  throw new Error("Could not generate a unique invitation code.");
+  return `DEC19-${String(highestNumber + 1).padStart(3, "0")}`;
 }
 
 async function getSheetRows(sheets) {
