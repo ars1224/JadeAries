@@ -104,6 +104,7 @@ const invitationDots = Array.from(document.querySelectorAll(".invitation-dots bu
 const invitationPrevious = document.querySelector(".invitation-previous");
 const invitationNext = document.querySelector(".invitation-next");
 const invitationLightbox = document.getElementById("invitation-lightbox");
+const lightboxContent = invitationLightbox.querySelector(".lightbox-content");
 const lightboxImage = document.getElementById("lightbox-image");
 const lightboxTitle = document.getElementById("lightbox-title");
 let lastFocusedInvitation = null;
@@ -155,8 +156,11 @@ function restartInvitationAutoplay() {
 
 function openInvitationLightbox(page) {
     lastFocusedInvitation = page;
+    lightboxContent.classList.remove("is-zoomed");
     lightboxImage.src = page.dataset.fullImage;
     lightboxImage.alt = page.querySelector("img").alt;
+    lightboxImage.setAttribute("aria-label", "Zoom in on invitation");
+    lightboxImage.setAttribute("aria-pressed", "false");
     lightboxTitle.textContent = page.dataset.title;
     invitationLightbox.hidden = false;
     document.body.style.overflow = "hidden";
@@ -165,10 +169,32 @@ function openInvitationLightbox(page) {
 
 function closeInvitationLightbox() {
     invitationLightbox.hidden = true;
+    lightboxContent.classList.remove("is-zoomed");
     lightboxImage.src = "";
     document.body.style.overflow = "";
     lastFocusedInvitation?.focus();
 }
+
+function toggleInvitationZoom() {
+    const isZoomed = lightboxContent.classList.toggle("is-zoomed");
+    lightboxImage.setAttribute("aria-pressed", String(isZoomed));
+    lightboxImage.setAttribute(
+        "aria-label",
+        isZoomed ? "Zoom out from invitation" : "Zoom in on invitation"
+    );
+
+    if (!isZoomed) {
+        lightboxContent.scrollTo({ top: 0, left: 0 });
+    }
+}
+
+lightboxImage.addEventListener("click", toggleInvitationZoom);
+lightboxImage.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleInvitationZoom();
+    }
+});
 
 invitationPages.forEach((page) => {
     page.addEventListener("click", () => openInvitationLightbox(page));

@@ -795,11 +795,30 @@ address {
 }
 
 .lightbox-content img {
+    cursor: zoom-in;
     display: block;
     height: auto;
     max-height: calc(100vh - 120px);
     max-width: 100%;
     object-fit: contain;
+    transition: width 220ms ease;
+}
+
+.lightbox-content img:focus-visible {
+    outline: 2px solid var(--rose);
+    outline-offset: 4px;
+}
+
+.lightbox-content.is-zoomed {
+    height: calc(100vh - 48px);
+    width: calc(100vw - 48px);
+}
+
+.lightbox-content.is-zoomed img {
+    cursor: zoom-out;
+    max-height: none;
+    max-width: none;
+    width: min(1200px, 180vw);
 }
 
 .lightbox-content p {
@@ -1406,6 +1425,15 @@ footer small {
 
     .lightbox-content img {
         max-height: calc(100vh - 90px);
+    }
+
+    .lightbox-content.is-zoomed {
+        height: calc(100vh - 24px);
+        width: calc(100vw - 24px);
+    }
+
+    .lightbox-content.is-zoomed img {
+        width: 190vw;
     }
 
     .code-entry {
