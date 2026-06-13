@@ -9,6 +9,10 @@ const lightbox = document.getElementById("invitation-lightbox");
 const lightboxContent = lightbox.querySelector(".lightbox-content");
 const lightboxImage = document.getElementById("lightbox-image");
 const lightboxTitle = document.getElementById("lightbox-title");
+const weddingMusic = document.getElementById("wedding-music");
+const musicToggle = document.getElementById("music-toggle");
+const musicLabel = musicToggle.querySelector(".music-label");
+weddingMusic.volume = 0.25;
 
 let activeIndex = 0;
 let touchStartX = 0;
@@ -20,6 +24,59 @@ let dragStartX = 0;
 let dragStartY = 0;
 let isDragging = false;
 let suppressZoomClick = false;
+
+function updateMusicControl(isPlaying) {
+    musicToggle.classList.toggle("is-playing", isPlaying);
+    musicToggle.setAttribute("aria-pressed", String(isPlaying));
+    musicToggle.setAttribute("aria-label", isPlaying ? "Pause wedding music" : "Play wedding music");
+    musicLabel.textContent = isPlaying ? "Pause music" : "Play music";
+}
+
+musicToggle.addEventListener("click", async () => {
+    if (weddingMusic.paused) {
+        try {
+            await weddingMusic.play();
+            updateMusicControl(true);
+        } catch {
+            updateMusicControl(false);
+        }
+    } else {
+        weddingMusic.pause();
+        updateMusicControl(false);
+    }
+});
+
+weddingMusic.addEventListener("play", () => updateMusicControl(true));
+weddingMusic.addEventListener("pause", () => updateMusicControl(false));
+
+async function attemptMusicAutoplay() {
+    try {
+        await weddingMusic.play();
+        updateMusicControl(true);
+        return true;
+    } catch {
+        updateMusicControl(false);
+        return false;
+    }
+}
+
+async function playMusicOnFirstInteraction() {
+    if (weddingMusic.paused) {
+        await attemptMusicAutoplay();
+    }
+
+    ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+        document.removeEventListener(eventName, playMusicOnFirstInteraction);
+    });
+}
+
+attemptMusicAutoplay().then((started) => {
+    if (!started) {
+        ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
+            document.addEventListener(eventName, playMusicOnFirstInteraction, { once: true });
+        });
+    }
+});
 
 function applyPan() {
     lightboxImage.style.transform =
