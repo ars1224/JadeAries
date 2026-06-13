@@ -146,6 +146,51 @@ button,
     gap: 10px;
 }
 
+.stats-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 24px;
+}
+
+.stat-card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    box-shadow: 0 14px 35px rgba(116, 66, 80, 0.08);
+    padding: 22px;
+}
+
+.stat-card span {
+    color: var(--muted);
+    display: block;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.stat-card strong {
+    color: var(--rose-dark);
+    display: block;
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 5vw, 3.6rem);
+    font-weight: 500;
+    line-height: 1;
+    margin-top: 12px;
+}
+
+.stat-attending {
+    border-top: 3px solid #79966b;
+}
+
+.stat-declined {
+    border-top: 3px solid #aa6679;
+}
+
+.stat-pending {
+    border-top: 3px solid #d1a74f;
+}
+
 .panel {
     margin-top: 24px;
     padding: clamp(24px, 4vw, 42px);
@@ -259,6 +304,10 @@ button,
 }
 
 @media (max-width: 820px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .manager-header,
     .toolbar,
     .add-panel {
@@ -282,6 +331,14 @@ button,
 }
 
 @media (max-width: 520px) {
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .stat-card {
+        padding: 17px;
+    }
+
     .guest-row {
         grid-template-columns: 1fr;
     }

@@ -13,9 +13,29 @@ const guestList = document.getElementById("guest-list");
 const guestTemplate = document.getElementById("guest-row-template");
 const managerMessage = document.getElementById("manager-message");
 const emptyState = document.getElementById("empty-state");
+const statTotal = document.getElementById("stat-total");
+const statAttending = document.getElementById("stat-attending");
+const statDeclined = document.getElementById("stat-declined");
+const statPending = document.getElementById("stat-pending");
 
 let adminPassword = "";
 let guests = [];
+
+function updateStats() {
+    const attending = guests.filter(
+        (guest) => guest.status.toLowerCase() === "attending"
+    ).length;
+    const declined = guests.filter(
+        (guest) => guest.status.toLowerCase() === "declined"
+    ).length;
+    const total = guests.length;
+    const pending = Math.max(total - attending - declined, 0);
+
+    statTotal.textContent = String(total);
+    statAttending.textContent = String(attending);
+    statDeclined.textContent = String(declined);
+    statPending.textContent = String(pending);
+}
 
 async function apiRequest(method = "GET", body) {
     const response = await fetch(API_URL, {
@@ -105,6 +125,7 @@ function renderGuests() {
 async function loadGuests() {
     const data = await apiRequest();
     guests = data.guests;
+    updateStats();
     renderGuests();
 }
 
@@ -129,6 +150,7 @@ loginForm.addEventListener("submit", async (event) => {
 logoutButton.addEventListener("click", () => {
     adminPassword = "";
     guests = [];
+    updateStats();
     guestList.replaceChildren();
     managerView.hidden = true;
     loginView.hidden = false;
