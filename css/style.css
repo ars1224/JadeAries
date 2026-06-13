@@ -644,6 +644,11 @@ address {
     max-width: 560px;
 }
 
+.invitation-page-link {
+    display: inline-block;
+    margin-top: 20px;
+}
+
 .invitation-carousel {
     margin: auto;
     max-width: 1180px;
@@ -811,14 +816,25 @@ address {
 
 .lightbox-content.is-zoomed {
     height: calc(100vh - 48px);
+    overflow: hidden;
+    touch-action: none;
     width: calc(100vw - 48px);
 }
 
 .lightbox-content.is-zoomed img {
-    cursor: zoom-out;
+    cursor: grab;
+    left: 50%;
     max-height: none;
     max-width: none;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    user-select: none;
     width: min(1200px, 180vw);
+}
+
+.lightbox-content.is-zoomed img.is-dragging {
+    cursor: grabbing;
 }
 
 .lightbox-content p {

@@ -111,6 +111,25 @@ let lastFocusedInvitation = null;
 let activeInvitationPage = 0;
 let invitationTouchStartX = 0;
 let invitationAutoplay = null;
+let lightboxPanX = 0;
+let lightboxPanY = 0;
+let lightboxDragStartX = 0;
+let lightboxDragStartY = 0;
+let isDraggingInvitation = false;
+let suppressInvitationZoomClick = false;
+
+function applyInvitationPan() {
+    lightboxImage.style.transform =
+        `translate(calc(-50% + ${lightboxPanX}px), calc(-50% + ${lightboxPanY}px))`;
+}
+
+function resetInvitationPan() {
+    lightboxPanX = 0;
+    lightboxPanY = 0;
+    lightboxImage.style.transform = "";
+    lightboxImage.classList.remove("is-dragging");
+    isDraggingInvitation = false;
+}
 
 function positionInvitationCarousel() {
     const pages = Array.from(invitationPages);
@@ -157,6 +176,7 @@ function restartInvitationAutoplay() {
 function openInvitationLightbox(page) {
     lastFocusedInvitation = page;
     lightboxContent.classList.remove("is-zoomed");
+    resetInvitationPan();
     lightboxImage.src = page.dataset.fullImage;
     lightboxImage.alt = page.querySelector("img").alt;
     lightboxImage.setAttribute("aria-label", "Zoom in on invitation");
@@ -170,22 +190,26 @@ function openInvitationLightbox(page) {
 function closeInvitationLightbox() {
     invitationLightbox.hidden = true;
     lightboxContent.classList.remove("is-zoomed");
+    resetInvitationPan();
     lightboxImage.src = "";
     document.body.style.overflow = "";
     lastFocusedInvitation?.focus();
 }
 
 function toggleInvitationZoom() {
+    if (isDraggingInvitation || suppressInvitationZoomClick) {
+        suppressInvitationZoomClick = false;
+        return;
+    }
+
     const isZoomed = lightboxContent.classList.toggle("is-zoomed");
+    resetInvitationPan();
     lightboxImage.setAttribute("aria-pressed", String(isZoomed));
     lightboxImage.setAttribute(
         "aria-label",
         isZoomed ? "Zoom out from invitation" : "Zoom in on invitation"
     );
 
-    if (!isZoomed) {
-        lightboxContent.scrollTo({ top: 0, left: 0 });
-    }
 }
 
 lightboxImage.addEventListener("click", toggleInvitationZoom);
@@ -195,6 +219,49 @@ lightboxImage.addEventListener("keydown", (event) => {
         toggleInvitationZoom();
     }
 });
+
+lightboxImage.addEventListener("pointerdown", (event) => {
+    if (!lightboxContent.classList.contains("is-zoomed")) {
+        return;
+    }
+
+    event.preventDefault();
+    isDraggingInvitation = true;
+    suppressInvitationZoomClick = false;
+    lightboxDragStartX = event.clientX - lightboxPanX;
+    lightboxDragStartY = event.clientY - lightboxPanY;
+    lightboxImage.classList.add("is-dragging");
+    lightboxImage.setPointerCapture(event.pointerId);
+});
+
+lightboxImage.addEventListener("pointermove", (event) => {
+    if (!isDraggingInvitation) {
+        return;
+    }
+
+    lightboxPanX = event.clientX - lightboxDragStartX;
+    lightboxPanY = event.clientY - lightboxDragStartY;
+    if (Math.abs(lightboxPanX) > 5 || Math.abs(lightboxPanY) > 5) {
+        suppressInvitationZoomClick = true;
+    }
+    applyInvitationPan();
+});
+
+function stopInvitationDrag(event) {
+    if (!isDraggingInvitation) {
+        return;
+    }
+
+    isDraggingInvitation = false;
+    lightboxImage.classList.remove("is-dragging");
+
+    if (lightboxImage.hasPointerCapture(event.pointerId)) {
+        lightboxImage.releasePointerCapture(event.pointerId);
+    }
+}
+
+lightboxImage.addEventListener("pointerup", stopInvitationDrag);
+lightboxImage.addEventListener("pointercancel", stopInvitationDrag);
 
 invitationPages.forEach((page) => {
     page.addEventListener("click", () => openInvitationLightbox(page));
