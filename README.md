@@ -14,11 +14,15 @@ The existing Supabase tables and data remain in place. Run these migrations in o
 
 `database/migrations/005_populate_image_urls.sql`
 
-This adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
+`database/migrations/006_supabase_admin_rsvp.sql`
+
+Migration `004` adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
 
 The older `database/schema.sql` and migrations `001`–`003` belong to an abandoned direct-PostgreSQL prototype in this working tree. Do not run or import them into the prepared `aries-jade-wedding` Supabase project.
 
 Migration `005` maps all approved attire and menu photos to root-relative `/images/attire/` and `/images/food/` paths served by Netlify.
+
+Migration `006` adds a service-role-only admin RSVP wrapper. It reuses the public RSVP transaction for attending and not-attending updates and adds an atomic pending reset that removes any saved food choice. It does not disable RLS or grant browser roles access.
 
 ## Netlify environment variables
 
@@ -27,16 +31,17 @@ Add these values in **Site configuration -> Environment variables**:
 - `SUPABASE_URL`: the project URL from Supabase project settings.
 - `SUPABASE_SERVICE_ROLE_KEY`: the Supabase service-role/secret key. Never expose it in browser code.
 - `RSVP_TOKEN_SECRET`: a random secret of at least 32 characters, used to sign guest RSVP sessions.
+- `ADMIN_PASSWORD`: a strong password for the private `/admin` dashboard. The browser exchanges it once for an eight-hour signed HttpOnly cookie; it is not retained in frontend JavaScript.
 
 Trigger a fresh deploy after changing environment variables.
 
-The separate legacy admin page/functions still reference `DATABASE_URL` and `ADMIN_PASSWORD`; they were not part of the guest RSVP migration and are not linked from the invitation. Do not rely on them for the prepared Supabase schema until they are migrated separately.
+The Supabase-backed admin functions do not use `DATABASE_URL`. The old `scripts/import-guests.js`, `netlify/functions/lib/database.js`, and `pg` dependency remain only for the abandoned direct-PostgreSQL prototype and can be removed after the Supabase admin has been verified in production.
 
 ## Local development
 
 1. Install Node.js and the Netlify CLI.
 2. Run `npm install` if dependencies are not present.
-3. Copy `.env.example` to `.env` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and a local `RSVP_TOKEN_SECRET`.
+3. Copy `.env.example` to `.env` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, a local `RSVP_TOKEN_SECRET`, and `ADMIN_PASSWORD`.
 4. Run `netlify dev` from this directory.
 5. Open the local URL printed by Netlify (normally `http://localhost:8888`).
 
@@ -51,10 +56,11 @@ For a production smoke test, use one designated guest record, submit attending w
 
 ## Safe Netlify deployment
 
-1. Run the Supabase migration and confirm it completes.
-2. Add the three required environment variables in Netlify for the Production deploy context.
+1. Run the Supabase migrations and confirm they complete.
+2. Add the four required environment variables in Netlify for the Production deploy context.
 3. Run `npm run check` and `npm test`.
 4. Deploy a preview first (for example, with a pull request or `netlify deploy`).
 5. Test lookup, attire, attending, menu selection, update, decline, music, invitation images, calendar download, and a narrow mobile viewport.
-6. Review Netlify Function logs for errors; guest-facing responses intentionally hide database details.
-7. Promote the verified deploy preview or merge to the production branch. Avoid putting any secret in Git, frontend JavaScript, or Netlify build output.
+6. Open `/admin`, verify correct/incorrect password handling, confirm all guest and catering totals, exercise search and both filters, then update one designated guest through attending, pending, and not attending. Confirm not attending removes its `guest_food_choices` row.
+7. Review Netlify Function logs for errors; guest-facing responses intentionally hide database details.
+8. Promote the verified deploy preview or merge to the production branch. Avoid putting any secret in Git, frontend JavaScript, or Netlify build output.

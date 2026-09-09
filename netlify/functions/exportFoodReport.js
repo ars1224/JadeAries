@@ -1,9 +1,10 @@
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 const { isAdminAuthorized } = require("./lib/adminAuth");
-const { query } = require("./lib/database");
 const { buildFoodReport } = require("./lib/foodReport");
 const { json, methodNotAllowed } = require("./lib/http");
+const { MENU_ITEMS } = require("./lib/menu");
+const supabase = require("./lib/supabase");
 
 const BRAND = {
   rose: "#c96582",
@@ -371,9 +372,43 @@ function createPdf(report) {
   });
 }
 
+function one(value) {
+  return Array.isArray(value) ? (value[0] || null) : (value || null);
+}
+
+function normalizedMenuName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildSupabaseFoodReport(guestRows, optionRows) {
+  const legacyPrices = new Map(
+    MENU_ITEMS.map((item) => [normalizedMenuName(item.name), Number(item.price || 0)])
+  );
+  const menu = (Array.isArray(optionRows) ? optionRows : []).map((row) => ({
+    slug: String(row.id),
+    category: row.course,
+    name: row.name,
+    description: row.description || "",
+    dietaryCodes: row.dietary_restrictions || [],
+    price: legacyPrices.get(normalizedMenuName(row.name)) || 0,
+  }));
+  const guests = (Array.isArray(guestRows) ? guestRows : []).map((row) => {
+    const choice = one(row.guest_food_choices);
+    return {
+      name: row.full_name,
+      status: row.rsvp_status,
+      mealChoice: choice?.main_id ? String(choice.main_id) : null,
+      dessertChoice: choice?.dessert_id ? String(choice.dessert_id) : null,
+      dietaryRequirements: row.dietary_requirements || "",
+    };
+  });
+
+  return buildFoodReport(guests, menu);
+}
+
 exports.handler = async (event) => {
   if (!isAdminAuthorized(event)) {
-    return json(401, { error: "Invalid admin password." });
+    return json(401, { error: "Your admin session has expired. Please log in again." });
   }
 
   if (event.httpMethod !== "GET") {
@@ -386,13 +421,17 @@ exports.handler = async (event) => {
   }
 
   try {
-    const result = await query(
-      `SELECT full_name, rsvp_status, meal_choice, dessert_choice, dietary_requirements
-       FROM guests
-       WHERE rsvp_status = 'attending'
-       ORDER BY LOWER(full_name)`
-    );
-    const report = buildFoodReport(result.rows);
+    const guestSelect = "full_name,rsvp_status,dietary_requirements,guest_food_choices(main_id,dessert_id)";
+    const optionSelect = "id,course,name,description,dietary_restrictions,sort_order";
+    const [guestRows, optionRows] = await Promise.all([
+      supabase.request(
+        `guests?select=${encodeURIComponent(guestSelect)}&rsvp_status=eq.attending&order=full_name.asc&limit=1000`
+      ),
+      supabase.request(
+        `food_options?select=${encodeURIComponent(optionSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`
+      ),
+    ]);
+    const report = buildSupabaseFoodReport(guestRows, optionRows);
     const output = format === "pdf" ? await createPdf(report) : await createExcel(report);
     const filename = `food-orders-${fileDate(report.generatedAt)}.${format}`;
 
@@ -409,10 +448,15 @@ exports.handler = async (event) => {
       body: output.toString("base64"),
     };
   } catch (error) {
-    console.error("Food report export failed", error);
+    console.error("Food report export failed", {
+      status: error?.status,
+      code: error?.code,
+      name: error?.name,
+    });
     return json(500, { error: "The food report could not be generated right now." });
   }
 };
 
 module.exports.createExcel = createExcel;
 module.exports.createPdf = createPdf;
+module.exports.buildSupabaseFoodReport = buildSupabaseFoodReport;

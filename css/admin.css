@@ -176,7 +176,7 @@ button,
 .stats-grid {
     display: grid;
     gap: 14px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     margin-top: 30px;
 }
 
@@ -206,6 +206,7 @@ button,
 .stat-attending { border-top-color: var(--sage); }
 .stat-declined { border-top-color: var(--rose); }
 .stat-pending { border-top-color: #d5ad58; }
+.stat-meals { border-top-color: #819cc2; }
 
 .report-note {
     color: var(--muted);
@@ -268,6 +269,7 @@ button,
 .food-report-groups {
     display: grid;
     gap: 38px;
+    margin-top: 32px;
 }
 
 .food-report-group > header {
@@ -308,6 +310,21 @@ button,
     border-radius: 18px;
     min-width: 0;
     padding: 20px;
+}
+
+.catering-count-card {
+    align-items: center;
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+}
+
+.catering-count-card strong {
+    color: var(--sage-dark);
+    flex: 0 0 auto;
+    font-family: var(--serif);
+    font-size: 2.2rem;
+    line-height: 1;
 }
 
 .food-report-card > header {
@@ -421,7 +438,15 @@ button,
 
 .span-two { grid-column: 1 / -1; }
 
-.search-field { min-width: min(300px, 100%); }
+.filter-grid {
+    align-items: end;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(150px, 0.8fr));
+    width: min(680px, 100%);
+}
+
+.search-field { min-width: 0; }
 .search-field input { margin-top: 6px; }
 
 .guest-list {
@@ -450,11 +475,37 @@ button,
 }
 
 .guest-fields {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     margin-top: 18px;
 }
 
 .guest-fields .span-two { grid-column: span 2; }
+
+.guest-readonly {
+    background: var(--sage-wash);
+    border: 1px solid #ccd4c6;
+    border-radius: 12px;
+    min-height: 70px;
+    padding: 12px 13px;
+}
+
+.guest-readonly span {
+    color: var(--sage);
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.guest-readonly strong,
+.guest-readonly time {
+    color: var(--ink);
+    display: block;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    margin-top: 7px;
+}
 
 .message {
     background: var(--sage-wash);
@@ -482,6 +533,12 @@ button,
 
 @media (max-width: 900px) {
     .add-panel { grid-template-columns: 1fr; }
+    .toolbar { align-items: stretch; flex-direction: column; }
+    .report-toolbar-actions { align-items: flex-start; }
+    .report-note { text-align: left; }
+    .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: 1fr 1fr; }
+    .search-field { grid-column: 1 / -1; }
     .guest-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .guest-fields .span-two { grid-column: 1 / -1; }
 }
@@ -495,6 +552,9 @@ button,
     }
 
     .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filter-grid { grid-template-columns: 1fr; }
+    .search-field { grid-column: auto; }
+    .food-report-grid { grid-template-columns: 1fr; }
     .food-report-summary { grid-template-columns: 1fr; }
     .report-toolbar-actions { align-items: flex-start; }
     .report-note { text-align: left; }

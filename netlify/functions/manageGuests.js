@@ -1,262 +1,192 @@
-const crypto = require("crypto");
 const { isAdminAuthorized } = require("./lib/adminAuth");
-const { query } = require("./lib/database");
 const { json, methodNotAllowed } = require("./lib/http");
-const { DESSERT_CHOICES, MAIN_CHOICES, MENU_ITEMS, ensureMenuItems, toSqlTextArray, withMenuRetry } = require("./lib/menu");
+const supabase = require("./lib/supabase");
 
-const STATUSES = new Set(["pending", "attending", "declined"]);
-const DEFAULT_PALETTE = ["#c7a6ed", "#ffc28e", "#ffe688", "#a9cfea"];
+const STATUSES = new Set(["pending", "attending", "not_attending"]);
 
-function text(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
+function one(value) {
+  return Array.isArray(value) ? (value[0] || null) : (value || null);
 }
 
-function normalizePalette(value) {
-  if (!Array.isArray(value)) {
-    return DEFAULT_PALETTE;
+function optionalText(value, maximum) {
+  const result = String(value || "").trim();
+  if (result.length > maximum) {
+    throw new Error("too_long");
   }
+  return result;
+}
 
-  const colours = value
-    .map(text)
-    .filter((colour) => /^#[0-9a-f]{6}$/i.test(colour))
-    .slice(0, 8);
+function requiredId(value) {
+  const id = String(value || "").trim();
+  return id && id.length <= 128 ? id : "";
+}
 
-  return colours.length ? colours : DEFAULT_PALETTE;
+function presentMenuItem(row) {
+  return {
+    id: String(row.id),
+    category: row.course,
+    name: row.name,
+    description: row.description || "",
+    dietaryCodes: row.dietary_restrictions || [],
+  };
 }
 
 function presentGuest(row) {
+  const foodChoice = one(row.guest_food_choices);
   return {
-    id: row.id,
-    invitationCode: row.invitation_code,
+    id: String(row.id),
     name: row.full_name,
-    role: row.role,
-    attireTitle: row.attire_title,
-    attireDescription: row.attire_description,
-    palette: row.palette,
+    role: row.role || "Guest",
     status: row.rsvp_status,
-    mealChoice: row.meal_choice,
-    dessertChoice: row.dessert_choice,
+    mainId: foodChoice?.main_id ? String(foodChoice.main_id) : null,
+    dessertId: foodChoice?.dessert_id ? String(foodChoice.dessert_id) : null,
+    foodNotes: foodChoice?.notes || "",
     dietaryRequirements: row.dietary_requirements || "",
-    respondedAt: row.responded_at,
+    respondedAt: row.responded_at || null,
   };
 }
 
-function validateGuest(body) {
-  const name = text(body.name);
-  const role = text(body.role) || "Guest";
-  const invitationCode = text(body.invitationCode).toUpperCase();
-  const attireTitle = text(body.attireTitle) || `${role} attire`;
-  const attireDescription = text(body.attireDescription) || "Semi-formal attire in a whimsical pastel shade.";
-
-  if (name.length < 2 || name.length > 120) {
-    throw new Error("A guest name between 2 and 120 characters is required.");
-  }
-
-  if (role.length > 80 || attireTitle.length > 120 || attireDescription.length > 500) {
-    throw new Error("One or more guest fields are too long.");
-  }
+function buildDashboard(guests, menu) {
+  const countStatus = (status) => guests.filter((guest) => guest.status === status).length;
+  const countChoice = (field, id) => guests.filter(
+    (guest) => guest.status === "attending" && guest[field] === id
+  ).length;
 
   return {
-    name,
-    role,
-    invitationCode,
-    attireTitle,
-    attireDescription,
-    palette: normalizePalette(body.palette),
+    summary: {
+      total: guests.length,
+      attending: countStatus("attending"),
+      notAttending: countStatus("not_attending"),
+      pending: countStatus("pending"),
+      mainSelections: guests.filter(
+        (guest) => guest.status === "attending" && guest.mainId
+      ).length,
+      dessertSelections: guests.filter(
+        (guest) => guest.status === "attending" && guest.dessertId
+      ).length,
+      mealSelections: guests.filter(
+        (guest) => guest.status === "attending" && guest.mainId && guest.dessertId
+      ).length,
+      dietaryRequirements: guests.filter((guest) => guest.dietaryRequirements).length,
+    },
+    catering: {
+      mains: menu
+        .filter((item) => item.category === "main")
+        .map((item) => ({ id: item.id, name: item.name, count: countChoice("mainId", item.id) })),
+      desserts: menu
+        .filter((item) => item.category === "dessert")
+        .map((item) => ({ id: item.id, name: item.name, count: countChoice("dessertId", item.id) })),
+    },
   };
 }
 
-function databaseError(error) {
-  if (error.code === "23505") {
-    return json(409, { error: "A guest with that full name already exists." });
-  }
+async function loadDashboard() {
+  const guestSelect = [
+    "id",
+    "full_name",
+    "role",
+    "rsvp_status",
+    "responded_at",
+    "dietary_requirements",
+    "guest_food_choices(main_id,dessert_id,notes)",
+  ].join(",");
+  const menuSelect = "id,course,name,description,dietary_restrictions,sort_order";
 
-  if (error.code === "23503") {
-    return json(409, { error: "That meal is not on the saved wedding menu yet. Please try saving again." });
-  }
+  const [guestRows, menuRows] = await Promise.all([
+    supabase.request(
+      `guests?select=${encodeURIComponent(guestSelect)}&order=full_name.asc&limit=1000`
+    ),
+    supabase.request(
+      `food_options?select=${encodeURIComponent(menuSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`
+    ),
+  ]);
 
-  if (error.code === "23514") {
-    return json(409, {
-      error: "The RSVP status and food selections do not match. Attending guests need one main and one dessert.",
-    });
-  }
+  const guests = (Array.isArray(guestRows) ? guestRows : []).map(presentGuest);
+  const menu = (Array.isArray(menuRows) ? menuRows : []).map(presentMenuItem);
+  return { guests, menu, ...buildDashboard(guests, menu) };
+}
 
-  if (["42P01", "42703"].includes(error.code)) {
-    return json(503, {
-      error: "The PostgreSQL database needs the latest wedding-menu migration before this guest can be saved.",
-    });
-  }
-
-  console.error("Guest management failed", error);
-  return json(500, {
-    error: `The guest list could not be updated right now${error.code ? ` (PostgreSQL ${error.code})` : ""}.`,
+function adminError(error) {
+  console.error("Admin guest management failed", {
+    status: error?.status,
+    code: error?.code,
+    name: error?.name,
   });
+
+  if (error?.code === "22023") {
+    return json(400, { error: "Choose one active main and one active dessert for an attending guest." });
+  }
+  if (error?.code === "P0002") {
+    return json(404, { error: "Guest not found." });
+  }
+  return json(500, { error: "The guest list could not be updated right now." });
 }
 
 exports.handler = async (event) => {
   if (!isAdminAuthorized(event)) {
-    return json(401, { error: "Invalid admin password." });
+    return json(401, { error: "Your admin session has expired. Please log in again." });
+  }
+
+  if (event.httpMethod === "GET") {
+    try {
+      return json(200, await loadDashboard());
+    } catch (error) {
+      return adminError(error);
+    }
+  }
+
+  if (event.httpMethod !== "PUT") {
+    return methodNotAllowed("GET, PUT");
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return json(400, { error: "The request body was not valid JSON." });
+  }
+
+  const guestId = requiredId(body.id);
+  const status = String(body.status || "").trim().toLowerCase();
+  const mainId = requiredId(body.mainId);
+  const dessertId = requiredId(body.dessertId);
+  let dietaryRequirements;
+  let foodNotes;
+
+  try {
+    dietaryRequirements = optionalText(body.dietaryRequirements, 1_000);
+    foodNotes = optionalText(body.foodNotes, 1_000);
+  } catch {
+    return json(400, { error: "Dietary requirements and food notes must each be 1,000 characters or fewer." });
+  }
+
+  if (!guestId) {
+    return json(400, { error: "A valid guest ID is required." });
+  }
+  if (!STATUSES.has(status)) {
+    return json(400, { error: "Choose a valid RSVP status." });
+  }
+  if (status === "attending" && (!mainId || !dessertId)) {
+    return json(400, { error: "Attending guests require one main and one dessert." });
   }
 
   try {
-    if (event.httpMethod === "GET") {
-      const result = await query(
-        `SELECT
-           id, invitation_code, full_name, role, attire_title, attire_description,
-           palette, rsvp_status, meal_choice, dessert_choice, dietary_requirements, responded_at
-         FROM guests
-         ORDER BY LOWER(full_name)`
-      );
-
-      try {
-        await ensureMenuItems(query);
-      } catch (error) {
-        console.error("Menu sync failed", error);
-      }
-
-      return json(200, { guests: result.rows.map(presentGuest), menu: MENU_ITEMS });
-    }
-
-    let body;
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch {
-      return json(400, { error: "The request body was not valid JSON." });
-    }
-
-    if (event.httpMethod === "POST") {
-      let guest;
-      try {
-        guest = validateGuest(body);
-      } catch (error) {
-        return json(400, { error: error.message });
-      }
-
-      const invitationCode = guest.invitationCode || `AJ-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
-      const result = await query(
-        `INSERT INTO guests (
-           invitation_code, full_name, role, attire_title, attire_description, palette
-         ) VALUES (
-           $1::VARCHAR(40),
-           $2::VARCHAR(120),
-           $3::VARCHAR(80),
-           $4::VARCHAR(120),
-           $5::VARCHAR(500),
-           $6::TEXT[]
-         )
-         RETURNING
-           id, invitation_code, full_name, role, attire_title, attire_description,
-           palette, rsvp_status, meal_choice, dessert_choice, dietary_requirements, responded_at`,
-        [
-          invitationCode,
-          guest.name,
-          guest.role,
-          guest.attireTitle,
-          guest.attireDescription,
-          toSqlTextArray(guest.palette),
-        ]
-      );
-
-      return json(201, { success: true, guest: presentGuest(result.rows[0]) });
-    }
-
-    if (event.httpMethod === "PUT") {
-      const id = Number(body.id);
-      if (!Number.isInteger(id) || id < 1) {
-        return json(400, { error: "A valid guest ID is required." });
-      }
-
-      let guest;
-      try {
-        guest = validateGuest(body);
-      } catch (error) {
-        return json(400, { error: error.message });
-      }
-
-      const status = text(body.status).toLowerCase();
-      const mealChoice = text(body.mealChoice).toLowerCase() || null;
-      const dessertChoice = text(body.dessertChoice).toLowerCase() || null;
-      const dietaryRequirements = String(body.dietaryRequirements || "").trim();
-
-      if (!STATUSES.has(status)) {
-        return json(400, { error: "Choose a valid RSVP status." });
-      }
-
-      if (mealChoice && !MAIN_CHOICES.has(mealChoice)) {
-        return json(400, { error: "Choose a valid main." });
-      }
-
-      if (dessertChoice && !DESSERT_CHOICES.has(dessertChoice)) {
-        return json(400, { error: "Choose a valid dessert." });
-      }
-
-      if (status === "attending" && (!mealChoice || !dessertChoice)) {
-        return json(400, { error: "Attending guests must have one main and one dessert." });
-      }
-
-      if (dietaryRequirements.length > 500) {
-        return json(400, { error: "Dietary requirements must be 500 characters or fewer." });
-      }
-
-      const result = await withMenuRetry(query, () => query(
-        `UPDATE guests
-         SET invitation_code = $1::VARCHAR(40),
-             full_name = $2::VARCHAR(120),
-             role = $3::VARCHAR(80),
-             attire_title = $4::VARCHAR(120),
-             attire_description = $5::VARCHAR(500),
-             palette = $6::TEXT[],
-             rsvp_status = $7::VARCHAR(12),
-             meal_choice = $8::VARCHAR(64),
-             dessert_choice = $9::VARCHAR(64),
-             dietary_requirements = $10::VARCHAR(500),
-             responded_at = CASE
-               WHEN $7::VARCHAR(12) = 'pending' THEN NULL
-               ELSE COALESCE(responded_at, NOW())
-             END,
-             updated_at = NOW()
-         WHERE id = $11::BIGINT
-         RETURNING
-           id, invitation_code, full_name, role, attire_title, attire_description,
-           palette, rsvp_status, meal_choice, dessert_choice, dietary_requirements, responded_at`,
-        [
-          guest.invitationCode || `AJ-${crypto.randomBytes(4).toString("hex").toUpperCase()}`,
-          guest.name,
-          guest.role,
-          guest.attireTitle,
-          guest.attireDescription,
-          toSqlTextArray(guest.palette),
-          status,
-          status === "attending" ? mealChoice : null,
-          status === "attending" ? dessertChoice : null,
-          status === "attending" ? dietaryRequirements : "",
-          id,
-        ]
-      ));
-
-      if (result.rowCount === 0) {
-        return json(404, { error: "Guest not found." });
-      }
-
-      return json(200, { success: true, guest: presentGuest(result.rows[0]) });
-    }
-
-    if (event.httpMethod === "DELETE") {
-      const id = Number(body.id);
-      if (!Number.isInteger(id) || id < 1) {
-        return json(400, { error: "A valid guest ID is required." });
-      }
-
-      const result = await query("DELETE FROM guests WHERE id = $1", [id]);
-      if (result.rowCount === 0) {
-        return json(404, { error: "Guest not found." });
-      }
-
-      return json(200, { success: true });
-    }
-
-    return methodNotAllowed("GET, POST, PUT, DELETE");
+    await supabase.request("rpc/admin_update_guest_rsvp", {
+      method: "POST",
+      body: {
+        p_guest_id: guestId,
+        p_status: status,
+        p_main_id: status === "attending" ? mainId : null,
+        p_dessert_id: status === "attending" ? dessertId : null,
+        p_dietary_requirements: status === "not_attending" ? "" : dietaryRequirements,
+        p_notes: status === "attending" ? foodNotes : "",
+      },
+    });
+    return json(200, { success: true });
   } catch (error) {
-    return databaseError(error);
+    return adminError(error);
   }
 };
+
+module.exports.buildDashboard = buildDashboard;
+module.exports.presentGuest = presentGuest;

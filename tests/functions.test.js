@@ -6,11 +6,17 @@ const test = require("node:test");
 process.env.SUPABASE_URL = "https://example.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
 process.env.RSVP_TOKEN_SECRET = "test-secret-that-is-longer-than-thirty-two-characters";
+process.env.ADMIN_PASSWORD = "test-admin-password-that-stays-on-the-server";
 
 const supabase = require("../netlify/functions/lib/supabase");
 const { SupabaseRequestError } = supabase;
 const { createGuestToken, verifyGuestToken } = require("../netlify/functions/lib/tokens");
 const { normalizeName } = require("../netlify/functions/find-guest");
+const {
+  COOKIE_NAME,
+  createAdminSession,
+  verifyAdminSession,
+} = require("../netlify/functions/lib/adminAuth");
 
 function loadHandler(relativePath, request) {
   supabase.request = request;
@@ -21,6 +27,10 @@ function loadHandler(relativePath, request) {
 
 function jsonBody(response) {
   return JSON.parse(response.body);
+}
+
+function adminHeaders() {
+  return { cookie: `${COOKIE_NAME}=${createAdminSession()}` };
 }
 
 test("name normalization ignores capitalization and repeated spaces", () => {
@@ -257,6 +267,232 @@ test("image migration maps all approved Netlify assets", () => {
   assert.match(sql, /\('Flower Girl', '\/images\/attire\/flower-girls-dress-reference\.png'\)/);
   assert.match(sql, /\('Officiant', '\/images\/attire\/officiant-attire-reference\.png'\)/);
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("correct admin password creates an HttpOnly session and incorrect passwords are rejected", async () => {
+  const modulePath = require.resolve("../netlify/functions/admin-auth");
+  delete require.cache[modulePath];
+  const handler = require(modulePath).handler;
+
+  const accepted = await handler({
+    httpMethod: "POST",
+    headers: {},
+    body: JSON.stringify({ password: process.env.ADMIN_PASSWORD }),
+  });
+  const rejected = await handler({
+    httpMethod: "POST",
+    headers: {},
+    body: JSON.stringify({ password: "incorrect" }),
+  });
+
+  assert.equal(accepted.statusCode, 200);
+  assert.match(accepted.headers["Set-Cookie"], /HttpOnly/);
+  assert.match(accepted.headers["Set-Cookie"], /SameSite=Strict/);
+  assert.doesNotMatch(accepted.body, /test-admin-password|service-role/i);
+  const token = accepted.headers["Set-Cookie"].match(new RegExp(`${COOKIE_NAME}=([^;]+)`))[1];
+  assert.equal(verifyAdminSession(token), true);
+  assert.equal(rejected.statusCode, 401);
+  assert.equal(rejected.headers["Set-Cookie"], undefined);
+});
+
+test("admin sessions expire and logout clears the session cookie", async () => {
+  const modulePath = require.resolve("../netlify/functions/admin-auth");
+  delete require.cache[modulePath];
+  const handler = require(modulePath).handler;
+  const issuedAt = Date.now();
+  const token = createAdminSession(issuedAt);
+
+  assert.equal(verifyAdminSession(token, issuedAt + (8 * 60 * 60 * 1_000) - 1), true);
+  assert.equal(verifyAdminSession(token, issuedAt + (8 * 60 * 60 * 1_000)), false);
+
+  const logout = await handler({ httpMethod: "DELETE", headers: adminHeaders() });
+  assert.equal(logout.statusCode, 200);
+  assert.match(logout.headers["Set-Cookie"], new RegExp(`^${COOKIE_NAME}=;`));
+  assert.match(logout.headers["Set-Cookie"], /Max-Age=0/);
+});
+
+test("Supabase admin dashboard loads all guests and calculates RSVP and catering totals", async () => {
+  const guestRows = Array.from({ length: 80 }, (_, index) => {
+    const attending = index < 30;
+    const notAttending = index >= 30 && index < 50;
+    return {
+      id: `guest-${index + 1}`,
+      full_name: `Guest ${String(index + 1).padStart(2, "0")}`,
+      role: index % 2 ? "Guest" : "Bridesmaid",
+      rsvp_status: attending ? "attending" : (notAttending ? "not_attending" : "pending"),
+      responded_at: attending || notAttending ? "2026-09-09T05:00:00Z" : null,
+      dietary_requirements: index === 0 ? "Nut allergy" : "",
+      guest_food_choices: attending ? [{
+        main_id: index < 12 ? "main-beef" : "main-salmon",
+        dessert_id: "dessert-tiramisu",
+        notes: index === 0 ? "Sauce on the side" : "",
+      }] : [],
+    };
+  });
+  const menuRows = [
+    { id: "main-beef", course: "main", name: "Roasted Beef Fillet – 180g", sort_order: 10 },
+    { id: "main-salmon", course: "main", name: "Lemon Baked Salmon – 170g", sort_order: 20 },
+    { id: "dessert-tiramisu", course: "dessert", name: "Classic Tiramisu", sort_order: 30 },
+  ];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath) => {
+    if (requestPath.startsWith("guests?")) {
+      assert.doesNotMatch(requestPath, /legacy_id|attire_profile_id/);
+      return guestRows;
+    }
+    if (requestPath.startsWith("food_options?")) {
+      return menuRows;
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+
+  const response = await handler({ httpMethod: "GET", headers: adminHeaders() });
+  const body = jsonBody(response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.guests.length, 80);
+  assert.deepEqual(body.summary, {
+    total: 80,
+    attending: 30,
+    notAttending: 20,
+    pending: 30,
+    mainSelections: 30,
+    dessertSelections: 30,
+    mealSelections: 30,
+    dietaryRequirements: 1,
+  });
+  assert.deepEqual(body.catering.mains.map(({ name, count }) => ({ name, count })), [
+    { name: "Roasted Beef Fillet – 180g", count: 12 },
+    { name: "Lemon Baked Salmon – 170g", count: 18 },
+  ]);
+  assert.equal(body.catering.desserts[0].count, 30);
+  assert.equal(body.guests[0].foodNotes, "Sauce on the side");
+  assert.doesNotMatch(response.body, /SUPABASE|service-role|legacy_id|ADMIN_PASSWORD/i);
+});
+
+test("admin dashboard rejects requests without a signed session before querying Supabase", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    return [];
+  });
+  const response = await handler({ httpMethod: "GET", headers: {} });
+  assert.equal(response.statusCode, 401);
+  assert.equal(calls, 0);
+});
+
+test("Supabase catering export uses current food names and accurate selection totals", () => {
+  const { buildSupabaseFoodReport } = require("../netlify/functions/exportFoodReport");
+  const report = buildSupabaseFoodReport([
+    {
+      full_name: "Guest One",
+      rsvp_status: "attending",
+      dietary_requirements: "Gluten free",
+      guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
+    },
+    {
+      full_name: "Guest Two",
+      rsvp_status: "attending",
+      dietary_requirements: "",
+      guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
+    },
+  ], [
+    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g" },
+    { id: "dessert-1", course: "dessert", name: "Classic Tiramisu" },
+  ]);
+
+  assert.equal(report.mainCount, 2);
+  assert.equal(report.dessertCount, 2);
+  assert.equal(report.sections[0].items[0].name, "Roasted Beef Fillet – 180g");
+  assert.equal(report.sections[1].items[0].name, "Classic Tiramisu");
+  assert.equal(report.sections[0].items[0].orders[0].dietaryRequirements, "Gluten free");
+});
+
+test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
+  let rpcBody;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
+    assert.equal(requestPath, "rpc/admin_update_guest_rsvp");
+    rpcBody = options.body;
+    return { rsvpStatus: "not_attending" };
+  });
+  const response = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      status: "not_attending",
+      mainId: "invalid-main",
+      dessertId: "invalid-dessert",
+      dietaryRequirements: "Should be cleared",
+      foodNotes: "Should be cleared",
+    }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(rpcBody.p_status, "not_attending");
+  assert.equal(rpcBody.p_main_id, null);
+  assert.equal(rpcBody.p_dessert_id, null);
+  assert.equal(rpcBody.p_dietary_requirements, "");
+  assert.equal(rpcBody.p_notes, "");
+});
+
+test("admin rejects missing selections and database-invalid food IDs", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    throw new SupabaseRequestError(400, "22023");
+  });
+  const missing = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7", status: "attending" }),
+  });
+  const invalid = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      status: "attending",
+      mainId: "not-a-main",
+      dessertId: "not-a-dessert",
+    }),
+  });
+
+  assert.equal(missing.statusCode, 400);
+  assert.equal(calls, 1);
+  assert.equal(invalid.statusCode, 400);
+  assert.match(jsonBody(invalid).error, /active main.*active dessert/i);
+});
+
+test("admin migration reuses RSVP validation, clears pending food, and preserves RLS", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "006_supabase_admin_rsvp.sql"),
+    "utf8"
+  );
+  assert.match(sql, /RETURN public\.submit_guest_rsvp/i);
+  assert.match(sql, /p_status <> 'pending'/i);
+  assert.match(sql, /DELETE FROM public\.guest_food_choices/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("admin frontend uses cookie sessions, name search, RSVP and role filters, and mobile layout", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "admin.html"), "utf8");
+  const script = fs.readFileSync(path.join(__dirname, "..", "js", "admin.js"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "css", "admin.css"), "utf8");
+
+  assert.match(html, /id="guest-search"/);
+  assert.match(html, /id="status-filter"/);
+  assert.match(html, /id="role-filter"/);
+  assert.match(html, /class="row-food-notes"/);
+  assert.match(script, /credentials: "same-origin"/);
+  assert.match(script, /assertDownloadBlob\(blob, format\)/);
+  assert.doesNotMatch(script, /adminPassword|Authorization:\s*`Bearer/i);
+  assert.match(script, /guest\.name\.toLowerCase\(\)\.includes\(query\)/);
+  assert.match(script, /guest\.status === status/);
+  assert.match(script, /guest\.role === role/);
+  assert.match(css, /@media \(max-width: 680px\)/);
+  assert.match(css, /\.filter-grid/);
 });
 
 test("frontend keeps full names intact, blocks duplicate submits, and preserves music", () => {

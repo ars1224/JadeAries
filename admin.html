@@ -15,7 +15,7 @@
         <section id="login-view" class="login-card">
             <p class="eyebrow">A &amp; J · Private</p>
             <h1>Guest manager</h1>
-            <p>Manage invitations and RSVPs stored in PostgreSQL.</p>
+            <p>Manage wedding invitations and RSVP responses.</p>
             <form id="login-form">
                 <label for="admin-password">Admin password</label>
                 <input id="admin-password" type="password" autocomplete="current-password" required>
@@ -37,10 +37,11 @@
             </header>
 
             <div class="stats-grid" aria-label="RSVP totals">
-                <article class="stat-card"><span>Total guests</span><strong id="stat-total">0</strong></article>
+                <article class="stat-card"><span>Total invited guests</span><strong id="stat-total">0</strong></article>
                 <article class="stat-card stat-attending"><span>Attending</span><strong id="stat-attending">0</strong></article>
-                <article class="stat-card stat-declined"><span>Declined</span><strong id="stat-declined">0</strong></article>
+                <article class="stat-card stat-declined"><span>Not attending</span><strong id="stat-not-attending">0</strong></article>
                 <article class="stat-card stat-pending"><span>Pending</span><strong id="stat-pending">0</strong></article>
+                <article class="stat-card stat-meals"><span>Meal selections</span><strong id="stat-meals">0</strong></article>
             </div>
 
             <section class="panel food-report-panel">
@@ -50,7 +51,7 @@
                         <h2>Food orders</h2>
                     </div>
                     <div class="report-toolbar-actions">
-                        <p class="report-note">Download the complete guest-by-dish list. Prices stay private to the admin manager.</p>
+                        <p class="report-note">Live totals from the active Supabase menu and saved guest selections.</p>
                         <div class="report-actions" aria-label="Download food report">
                             <button id="download-food-pdf" class="button-secondary" type="button">Download PDF</button>
                             <button id="download-food-excel" type="button">Download Excel</button>
@@ -58,61 +59,31 @@
                     </div>
                 </div>
                 <div class="food-report-summary" aria-label="Food order totals">
-                    <article><span>Main orders</span><strong id="report-main-count">0</strong></article>
-                    <article><span>Dessert orders</span><strong id="report-dessert-count">0</strong></article>
-                    <article><span>Combined total</span><strong id="report-grand-total">$0.00</strong></article>
+                    <article><span>Main selections</span><strong id="report-main-count">0</strong></article>
+                    <article><span>Dessert selections</span><strong id="report-dessert-count">0</strong></article>
+                    <article><span>Guests with dietary requirements</span><strong id="report-dietary-count">0</strong></article>
                 </div>
-            </section>
-
-            <section class="panel add-panel">
-                <div>
-                    <p class="eyebrow">New invitation</p>
-                    <h2>Add a guest</h2>
-                    <p>Create the exact full name they will enter on the invitation page. A private internal code is generated when left blank.</p>
-                </div>
-                <form id="add-guest-form" class="form-grid">
-                    <label class="span-two">Full name
-                        <input id="new-name" name="name" maxlength="120" required placeholder="Maria Santos">
-                    </label>
-                    <label>Role
-                        <select id="new-role" name="role">
-                            <option>Guest</option>
-                            <option>Bride</option>
-                            <option>Groom</option>
-                            <option>Bridesmaid</option>
-                            <option>Maid of Honour</option>
-                            <option>Groomsmen</option>
-                            <option>Best Man</option>
-                            <option>Parents</option>
-                            <option>Ninang</option>
-                            <option>Ninong</option>
-                            <option>Flower Girl</option>
-                            <option>Ring Bearer</option>
-                            <option>Bible Bearer</option>
-                            <option>Coin Bearer</option>
-                            <option>Guest - Officiant</option>
-                        </select>
-                    </label>
-                    <label>Invitation group code <small>(optional)</small>
-                        <input id="new-code" name="invitationCode" maxlength="40" placeholder="Generated automatically">
-                    </label>
-                    <label class="span-two">Attire title <small>(optional)</small>
-                        <input id="new-attire-title" name="attireTitle" maxlength="120" placeholder="e.g. Bridesmaid attire">
-                    </label>
-                    <label class="span-two">Attire description <small>(optional)</small>
-                        <textarea id="new-attire-description" name="attireDescription" rows="2" maxlength="500" placeholder="Long dress in an assigned whimsical pastel palette."></textarea>
-                    </label>
-                    <button class="span-two" type="submit">Add guest</button>
-                </form>
+                <div id="catering-totals" class="food-report-groups"></div>
             </section>
 
             <section class="panel">
                 <div class="toolbar">
                     <div>
-                        <p class="eyebrow">PostgreSQL guest list</p>
+                        <p class="eyebrow">Supabase guest list</p>
                         <h2>Invitations &amp; responses</h2>
                     </div>
-                    <label class="search-field"><span>Search</span><input id="guest-search" type="search" placeholder="Name, role, status or code"></label>
+                    <div class="filter-grid">
+                        <label class="search-field"><span>Search by guest name</span><input id="guest-search" type="search" placeholder="Guest name"></label>
+                        <label><span>RSVP status</span>
+                            <select id="status-filter">
+                                <option value="">All statuses</option>
+                                <option value="attending">Attending</option>
+                                <option value="not_attending">Not attending</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </label>
+                        <label><span>Role</span><select id="role-filter"><option value="">All roles</option></select></label>
+                    </div>
                 </div>
 
                 <p id="manager-message" class="message" role="status" hidden></p>
@@ -128,18 +99,17 @@
                 <div><strong class="guest-heading"></strong><span class="guest-meta"></span></div>
                 <div class="row-actions">
                     <button class="save-row" type="button">Save</button>
-                    <button class="delete-row button-danger" type="button">Delete</button>
                 </div>
             </header>
             <div class="guest-fields">
-                <label>Full name<input class="row-name" maxlength="120"></label>
-                <label>Role<input class="row-role" maxlength="80"></label>
-                <label>Group code<input class="row-code" maxlength="40"></label>
+                <div class="guest-readonly"><span>Full name</span><strong class="row-name"></strong></div>
+                <div class="guest-readonly"><span>Role</span><strong class="row-role"></strong></div>
+                <div class="guest-readonly"><span>Responded</span><time class="row-responded"></time></div>
                 <label>Status
                     <select class="row-status">
                         <option value="pending">Pending</option>
                         <option value="attending">Attending</option>
-                        <option value="declined">Declined</option>
+                        <option value="not_attending">Not attending</option>
                     </select>
                 </label>
                 <label>Main
@@ -152,12 +122,8 @@
                         <option value="">Not selected</option>
                     </select>
                 </label>
-                <label>Food total <small>(private)</small>
-                    <output class="row-food-total">$0.00</output>
-                </label>
-                <label class="span-two">Attire title<input class="row-attire-title" maxlength="120"></label>
-                <label class="span-two">Attire description<textarea class="row-attire-description" rows="2" maxlength="500"></textarea></label>
-                <label class="span-two">Dietary requirements<textarea class="row-dietary" rows="2" maxlength="500"></textarea></label>
+                <label class="span-two">Dietary requirements<textarea class="row-dietary" rows="2" maxlength="1000"></textarea></label>
+                <label class="span-two">Food-selection notes<textarea class="row-food-notes" rows="2" maxlength="1000"></textarea></label>
             </div>
         </article>
     </template>

@@ -4,7 +4,7 @@
   "description": "Personalized wedding invitation and Supabase-backed RSVP app.",
   "scripts": {
     "test": "node --test tests/functions.test.js",
-    "check": "node --check js/script.js && node --check js/admin.js && node --check netlify/functions/find-guest.js && node --check netlify/functions/get-menu.js && node --check netlify/functions/submit-rsvp.js && node --check netlify/functions/getGuests.js && node --check netlify/functions/updateRsvp.js && node --check netlify/functions/manageGuests.js && node --check netlify/functions/exportFoodReport.js && node --check netlify/functions/lib/supabase.js && node --check netlify/functions/lib/tokens.js",
+    "check": "node --check js/script.js && node --check js/admin.js && node --check netlify/functions/admin-auth.js && node --check netlify/functions/find-guest.js && node --check netlify/functions/get-menu.js && node --check netlify/functions/submit-rsvp.js && node --check netlify/functions/getGuests.js && node --check netlify/functions/updateRsvp.js && node --check netlify/functions/manageGuests.js && node --check netlify/functions/exportFoodReport.js && node --check netlify/functions/lib/adminAuth.js && node --check netlify/functions/lib/supabase.js && node --check netlify/functions/lib/tokens.js",
     "import:guests": "node --env-file=.env scripts/import-guests.js"
   },
   "repository": {
