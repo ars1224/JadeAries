@@ -269,6 +269,17 @@ test("image migration maps all approved Netlify assets", () => {
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
+test("guest attire correction targets the production Wedding Guest profile", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "008_fix_wedding_guest_attire_image.sql"),
+    "utf8"
+  );
+  assert.match(sql, /'wedding guest'/i);
+  assert.match(sql, /'wedding guest attire'/i);
+  assert.match(sql, /'\/images\/attire\/guest-attire-reference\.jpg'/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
 test("correct admin password creates an HttpOnly session and incorrect passwords are rejected", async () => {
   const modulePath = require.resolve("../netlify/functions/admin-auth");
   delete require.cache[modulePath];
