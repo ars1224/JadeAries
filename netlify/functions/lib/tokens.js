@@ -5,8 +5,15 @@ const TOKEN_LIFETIME_MS = 180 * 24 * 60 * 60 * 1_000;
 function getSecret() {
   const secret = process.env.RSVP_TOKEN_SECRET;
 
+  console.log("RSVP token diagnostic", {
+    configured: Boolean(secret),
+    length: secret ? secret.length : 0,
+  });
+
   if (!secret || secret.length < 32) {
-    throw new Error("RSVP_TOKEN_SECRET must be configured with at least 32 characters.");
+    throw new Error(
+      "RSVP_TOKEN_SECRET must be configured with at least 32 characters."
+    );
   }
 
   return secret;
