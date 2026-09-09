@@ -82,10 +82,18 @@ exports.handler = async (event) => {
     }
 
     return json(200, { guest: presentGuest(rows[0]) });
-  } catch (error) {
-    console.error("Guest lookup failed", { status: error.status, code: error.code });
-    return json(500, { error: "We couldn't open your invitation right now. Please try again." });
-  }
+} catch (error) {
+  console.error("Guest lookup failed", {
+    name: error?.name,
+    message: error?.message,
+    status: error?.status,
+    code: error?.code,
+  });
+
+  return json(500, {
+    error: "We couldn't open your invitation right now. Please try again."
+  });
+}
 };
 
 exports.normalizeName = normalizeName;
