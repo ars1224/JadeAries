@@ -156,10 +156,24 @@ function populateFoodSelect(select, category, selectedValue) {
     menuItems
         .filter((item) => item.category === category)
         .forEach((item) => {
-            const dietary = item.dietaryCodes?.length ? ` · ${item.dietaryCodes.join("/")}` : "";
+            const dietaryCodes = normalizeDietaryCodes(item.dietaryCodes);
+            const dietary = dietaryCodes.length ? ` · ${dietaryCodes.join("/")}` : "";
             select.append(new Option(`${item.name}${dietary}`, item.id));
         });
     select.value = selectedValue || "";
+}
+
+function normalizeDietaryCodes(value) {
+  if (Array.isArray(value)) return value;
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }
 
 function syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput) {
