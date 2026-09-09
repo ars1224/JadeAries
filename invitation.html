@@ -1,109 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="The wedding invitation of Jhon Aries and Charmnie Jade.">
-    <title>Wedding Invitation | Jhon Aries &amp; Charmnie Jade</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/invitation.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Wedding Invitation | A &amp; J</title>
+    <script>
+        window.location.replace(`index.html${window.location.search}${window.location.hash}`);
+    </script>
 </head>
-<body class="invitation-only-page">
-    <main>
-        <section class="invitation-gallery invitation-only-section">
-            <div class="floral-corner floral-top-left" aria-hidden="true">
-                <i class="css-flower flower-pink"></i>
-                <i class="css-flower flower-blue"></i>
-                <i class="css-flower flower-yellow"></i>
-            </div>
-            <div class="floral-corner floral-bottom-right" aria-hidden="true">
-                <i class="css-flower flower-blue"></i>
-                <i class="css-flower flower-pink"></i>
-                <i class="css-flower flower-purple"></i>
-            </div>
-
-            <div class="section-heading">
-                <p class="eyebrow">Jhon Aries &amp; Charmnie Jade</p>
-                <h1>Our Wedding Invitation</h1>
-                <p class="gallery-intro">Browse each page, then click an invitation to enlarge and zoom.</p>
-            </div>
-
-            <div class="invitation-carousel" aria-label="Wedding invitation pages" tabindex="0">
-                <button class="invitation-arrow invitation-previous" type="button" aria-label="Previous invitation page">&larr;</button>
-                <div class="invitation-viewport">
-                    <div id="invitation-track" class="invitation-track">
-                        <button class="invitation-page" type="button" data-full-image="img/1.png" data-title="Invitation">
-                            <img src="img/1.png" alt="Wedding invitation page 1">
-                            <span>Invitation</span>
-                        </button>
-                        <button class="invitation-page" type="button" data-full-image="img/2.png" data-title="Wedding details">
-                            <img src="img/2.png" alt="Wedding invitation page 2">
-                            <span>Wedding details</span>
-                        </button>
-                        <button class="invitation-page" type="button" data-full-image="img/3.png" data-title="Entourage">
-                            <img src="img/3.png" alt="Wedding invitation page 3">
-                            <span>Entourage</span>
-                        </button>
-                        <button class="invitation-page" type="button" data-full-image="img/4.png" data-title="Finer details">
-                            <img src="img/4.png" alt="Wedding invitation page 4">
-                            <span>Finer details</span>
-                        </button>
-                        <button class="invitation-page" type="button" data-full-image="img/5.png" data-title="Reminders and timeline">
-                            <img src="img/5.png" alt="Wedding invitation page 5">
-                            <span>Reminders and timeline</span>
-                        </button>
-                    </div>
-                </div>
-                <button class="invitation-arrow invitation-next" type="button" aria-label="Next invitation page">&rarr;</button>
-                <div class="invitation-dots" aria-label="Choose an invitation page">
-                    <button class="is-active" type="button" aria-label="Show invitation page 1" aria-current="true"></button>
-                    <button type="button" aria-label="Show invitation page 2"></button>
-                    <button type="button" aria-label="Show invitation page 3"></button>
-                    <button type="button" aria-label="Show invitation page 4"></button>
-                    <button type="button" aria-label="Show invitation page 5"></button>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <div id="invitation-lightbox" class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" hidden>
-        <div class="lightbox-backdrop" data-close-lightbox></div>
-        <div class="lightbox-content">
-            <button class="lightbox-close" type="button" aria-label="Close enlarged invitation" data-close-lightbox>&times;</button>
-            <img
-                id="lightbox-image"
-                src=""
-                alt=""
-                role="button"
-                tabindex="0"
-                aria-label="Zoom in on invitation"
-                aria-pressed="false"
-            >
-            <p id="lightbox-title"></p>
-        </div>
-    </div>
-
-    <audio
-        id="wedding-music"
-        src="Audio/Goodness%20Of%20God%20(Wedding%20Version)%20-%20Bethel%20Music%20-%20Violin%20Cover.mp3"
-        preload="metadata"
-        autoplay
-        loop
-    ></audio>
-    <button
-        id="music-toggle"
-        class="music-toggle"
-        type="button"
-        aria-label="Play wedding music"
-        aria-pressed="false"
-    >
-        <span class="music-icon" aria-hidden="true">♪</span>
-        <span class="music-label">Play music</span>
-    </button>
-
-    <script src="js/invitation.js"></script>
+<body>
+    <p><a href="index.html">Open your wedding invitation</a></p>
 </body>
 </html>

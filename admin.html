@@ -1,89 +1,118 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Guest Manager | Jhon Aries &amp; Charmnie Jade</title>
+    <title>Guest Manager | A &amp; J</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
     <main class="admin-shell">
         <section id="login-view" class="login-card">
-            <p class="eyebrow">Private access</p>
-            <h1>Guest Manager</h1>
-            <p>Enter your admin password to manage invitation codes.</p>
+            <p class="eyebrow">A &amp; J · Private</p>
+            <h1>Guest manager</h1>
+            <p>Manage invitations and RSVPs stored in PostgreSQL.</p>
             <form id="login-form">
                 <label for="admin-password">Admin password</label>
                 <input id="admin-password" type="password" autocomplete="current-password" required>
-                <button type="submit">Unlock Manager</button>
-                <p id="login-error" class="message error" role="alert" hidden></p>
+                <button type="submit">Open guest list</button>
             </form>
+            <p id="login-error" class="message error" role="alert" hidden></p>
         </section>
 
-        <section id="manager-view" class="manager" hidden>
+        <section id="manager-view" hidden>
             <header class="manager-header">
                 <div>
-                    <p class="eyebrow">Wedding administration</p>
-                    <h1>Guest Codes</h1>
+                    <p class="eyebrow">19 December 2026</p>
+                    <h1>Guest manager</h1>
                 </div>
                 <div class="header-actions">
-                    <a href="index.html">View website</a>
-                    <button id="logout-button" class="button-secondary" type="button">Lock</button>
+                    <a href="index.html">View invitation</a>
+                    <button id="logout-button" class="button-secondary" type="button">Log out</button>
                 </div>
             </header>
 
-            <section class="stats-grid" aria-label="Guest RSVP statistics">
-                <article class="stat-card">
-                    <span>Total invited</span>
-                    <strong id="stat-total">0</strong>
-                </article>
-                <article class="stat-card stat-attending">
-                    <span>Attending</span>
-                    <strong id="stat-attending">0</strong>
-                </article>
-                <article class="stat-card stat-declined">
-                    <span>Not attending</span>
-                    <strong id="stat-declined">0</strong>
-                </article>
-                <article class="stat-card stat-pending">
-                    <span>Still undecided</span>
-                    <strong id="stat-pending">0</strong>
-                </article>
+            <div class="stats-grid" aria-label="RSVP totals">
+                <article class="stat-card"><span>Total guests</span><strong id="stat-total">0</strong></article>
+                <article class="stat-card stat-attending"><span>Attending</span><strong id="stat-attending">0</strong></article>
+                <article class="stat-card stat-declined"><span>Declined</span><strong id="stat-declined">0</strong></article>
+                <article class="stat-card stat-pending"><span>Pending</span><strong id="stat-pending">0</strong></article>
+            </div>
+
+            <section class="panel food-report-panel">
+                <div class="toolbar">
+                    <div>
+                        <p class="eyebrow">Private catering report</p>
+                        <h2>Food orders</h2>
+                    </div>
+                    <div class="report-toolbar-actions">
+                        <p class="report-note">Download the complete guest-by-dish list. Prices stay private to the admin manager.</p>
+                        <div class="report-actions" aria-label="Download food report">
+                            <button id="download-food-pdf" class="button-secondary" type="button">Download PDF</button>
+                            <button id="download-food-excel" type="button">Download Excel</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="food-report-summary" aria-label="Food order totals">
+                    <article><span>Main orders</span><strong id="report-main-count">0</strong></article>
+                    <article><span>Dessert orders</span><strong id="report-dessert-count">0</strong></article>
+                    <article><span>Combined total</span><strong id="report-grand-total">$0.00</strong></article>
+                </div>
             </section>
 
             <section class="panel add-panel">
                 <div>
                     <p class="eyebrow">New invitation</p>
-                    <h2>Add Guest Code</h2>
+                    <h2>Add a guest</h2>
+                    <p>Create the exact full name they will enter on the invitation page. A private internal code is generated when left blank.</p>
                 </div>
-                <form id="add-code-form" class="add-form">
-                    <div class="generated-code-note">
-                        <span>Invitation code</span>
-                        <strong>Generated as the next DEC19-xxx code</strong>
-                    </div>
-
-                    <label for="new-names">Guest names</label>
-                    <textarea id="new-names" rows="4" placeholder="Aries Tayao, Charmnie Gulay" required></textarea>
-                    <p class="field-help">Separate multiple guests with a comma or place each name on a new line.</p>
-
-                    <button type="submit">Add Invitation</button>
+                <form id="add-guest-form" class="form-grid">
+                    <label class="span-two">Full name
+                        <input id="new-name" name="name" maxlength="120" required placeholder="Maria Santos">
+                    </label>
+                    <label>Role
+                        <select id="new-role" name="role">
+                            <option>Guest</option>
+                            <option>Bride</option>
+                            <option>Groom</option>
+                            <option>Bridesmaid</option>
+                            <option>Maid of Honour</option>
+                            <option>Groomsmen</option>
+                            <option>Best Man</option>
+                            <option>Parents</option>
+                            <option>Ninang</option>
+                            <option>Ninong</option>
+                            <option>Flower Girl</option>
+                            <option>Ring Bearer</option>
+                            <option>Bible Bearer</option>
+                            <option>Coin Bearer</option>
+                            <option>Guest - Officiant</option>
+                        </select>
+                    </label>
+                    <label>Invitation group code <small>(optional)</small>
+                        <input id="new-code" name="invitationCode" maxlength="40" placeholder="Generated automatically">
+                    </label>
+                    <label class="span-two">Attire title <small>(optional)</small>
+                        <input id="new-attire-title" name="attireTitle" maxlength="120" placeholder="e.g. Bridesmaid attire">
+                    </label>
+                    <label class="span-two">Attire description <small>(optional)</small>
+                        <textarea id="new-attire-description" name="attireDescription" rows="2" maxlength="500" placeholder="Long dress in an assigned whimsical pastel palette."></textarea>
+                    </label>
+                    <button class="span-two" type="submit">Add guest</button>
                 </form>
             </section>
 
             <section class="panel">
                 <div class="toolbar">
                     <div>
-                        <p class="eyebrow">Guest list</p>
-                        <h2>Manage Invitations</h2>
+                        <p class="eyebrow">PostgreSQL guest list</p>
+                        <h2>Invitations &amp; responses</h2>
                     </div>
-                    <label class="search-field">
-                        <span>Search</span>
-                        <input id="guest-search" type="search" placeholder="Code, name, or status">
-                    </label>
+                    <label class="search-field"><span>Search</span><input id="guest-search" type="search" placeholder="Name, role, status or code"></label>
                 </div>
 
                 <p id="manager-message" class="message" role="status" hidden></p>
@@ -95,25 +124,40 @@
 
     <template id="guest-row-template">
         <article class="guest-row">
-            <div class="field">
-                <label>Code</label>
-                <input class="row-code" type="text" maxlength="12">
-            </div>
-            <div class="field guest-name-field">
-                <label>Guest name</label>
-                <input class="row-name" type="text">
-            </div>
-            <div class="field">
-                <label>Status</label>
-                <select class="row-status">
-                    <option>Pending</option>
-                    <option>Attending</option>
-                    <option>Declined</option>
-                </select>
-            </div>
-            <div class="row-actions">
-                <button class="save-row" type="button">Save</button>
-                <button class="delete-row button-danger" type="button">Delete</button>
+            <header class="guest-row-header">
+                <div><strong class="guest-heading"></strong><span class="guest-meta"></span></div>
+                <div class="row-actions">
+                    <button class="save-row" type="button">Save</button>
+                    <button class="delete-row button-danger" type="button">Delete</button>
+                </div>
+            </header>
+            <div class="guest-fields">
+                <label>Full name<input class="row-name" maxlength="120"></label>
+                <label>Role<input class="row-role" maxlength="80"></label>
+                <label>Group code<input class="row-code" maxlength="40"></label>
+                <label>Status
+                    <select class="row-status">
+                        <option value="pending">Pending</option>
+                        <option value="attending">Attending</option>
+                        <option value="declined">Declined</option>
+                    </select>
+                </label>
+                <label>Main
+                    <select class="row-meal">
+                        <option value="">Not selected</option>
+                    </select>
+                </label>
+                <label>Dessert
+                    <select class="row-dessert">
+                        <option value="">Not selected</option>
+                    </select>
+                </label>
+                <label>Food total <small>(private)</small>
+                    <output class="row-food-total">$0.00</output>
+                </label>
+                <label class="span-two">Attire title<input class="row-attire-title" maxlength="120"></label>
+                <label class="span-two">Attire description<textarea class="row-attire-description" rows="2" maxlength="500"></textarea></label>
+                <label class="span-two">Dietary requirements<textarea class="row-dietary" rows="2" maxlength="500"></textarea></label>
             </div>
         </article>
     </template>

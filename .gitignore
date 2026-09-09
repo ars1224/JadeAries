@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+.netlify/
+.npm-cache/
+node_modules/
+npm-debug.log*

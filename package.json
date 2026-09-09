@@ -1,10 +1,11 @@
 {
   "name": "jadearies",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Personalized wedding invitation and Supabase-backed RSVP app.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/functions.test.js",
+    "check": "node --check js/script.js && node --check js/admin.js && node --check netlify/functions/find-guest.js && node --check netlify/functions/get-menu.js && node --check netlify/functions/submit-rsvp.js && node --check netlify/functions/getGuests.js && node --check netlify/functions/updateRsvp.js && node --check netlify/functions/manageGuests.js && node --check netlify/functions/exportFoodReport.js && node --check netlify/functions/lib/supabase.js && node --check netlify/functions/lib/tokens.js",
+    "import:guests": "node --env-file=.env scripts/import-guests.js"
   },
   "repository": {
     "type": "git",
@@ -19,6 +20,8 @@
   },
   "homepage": "https://github.com/ars1224/JadeAries#readme",
   "dependencies": {
-    "googleapis": "^173.0.0"
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.0"
   }
 }

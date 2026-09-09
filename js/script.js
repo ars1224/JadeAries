@@ -1,25 +1,657 @@
-const weddingDate = new Date("2026-12-19T16:00:00+13:00");
-const rsvpDeadline = new Date("2026-10-17T00:00:00+13:00");
-const units = ["days", "hours", "minutes", "seconds"];
+const API = {
+    findGuest: "/.netlify/functions/find-guest",
+    getMenu: "/.netlify/functions/get-menu",
+    submitRsvp: "/.netlify/functions/submit-rsvp"
+};
 
-const menuToggle = document.querySelector(".menu-toggle");
-const mainNavigation = document.getElementById("main-navigation");
+const screens = new Map(
+    Array.from(document.querySelectorAll("[data-screen]")).map((screen) => [screen.dataset.screen, screen])
+);
+const lookupForm = document.getElementById("lookup-form");
+const guestNameInput = document.getElementById("guest-name");
+const lookupButton = document.getElementById("lookup-button");
+const lookupError = document.getElementById("lookup-error");
+const attendanceError = document.getElementById("attendance-error");
+const mealForm = document.getElementById("meal-form");
+const mealError = document.getElementById("meal-error");
+const saveRsvpButton = document.getElementById("save-rsvp-button");
+const savingOverlay = document.getElementById("saving-overlay");
+
+let activeGuest = null;
+let menuById = new Map();
+let successReturnTimer = null;
+let submissionInProgress = false;
+
+function returnToLookup() {
+    activeGuest = null;
+    lookupForm.reset();
+    clearInlineError(lookupError);
+    showScreen("lookup", "input");
+}
+
+function stopSuccessReturn() {
+    window.clearInterval(successReturnTimer);
+    successReturnTimer = null;
+}
+
+function startSuccessReturn() {
+    stopSuccessReturn();
+
+    const note = document.getElementById("success-return-note");
+    let remaining = 30;
+
+    const renderNote = () => {
+        if (!note) {
+            return;
+        }
+
+        note.textContent = remaining === 1
+            ? "Returning to Find your name in 1 second."
+            : `Returning to Find your name in ${remaining} seconds.`;
+    };
+
+    renderNote();
+    successReturnTimer = window.setInterval(() => {
+        remaining -= 1;
+
+        if (remaining <= 0) {
+            stopSuccessReturn();
+            returnToLookup();
+            return;
+        }
+
+        renderNote();
+    }, 1000);
+}
+
+function normalizeName(value) {
+    return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function setLoading(button, loading, loadingLabel, defaultLabel) {
+    button.disabled = loading;
+    button.textContent = loading ? loadingLabel : defaultLabel;
+}
+
+function showInlineError(element, message) {
+    element.textContent = message;
+    element.hidden = false;
+}
+
+function clearInlineError(element) {
+    element.textContent = "";
+    element.hidden = true;
+}
+
+function createMenuOption(item, fieldName) {
+    const label = document.createElement("label");
+    label.className = "choice-card meal-option";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = fieldName;
+    input.value = item.id;
+
+    const radioMark = document.createElement("span");
+    radioMark.className = "radio-mark";
+    radioMark.setAttribute("aria-hidden", "true");
+
+    const photo = document.createElement("span");
+    photo.className = "menu-option-photo";
+    photo.setAttribute("aria-hidden", "true");
+
+    if (item.imageUrl) {
+        const image = document.createElement("img");
+        image.src = item.imageUrl;
+        image.alt = "";
+        image.loading = "lazy";
+        photo.append(image);
+    }
+
+    const copy = document.createElement("span");
+    copy.className = "menu-option-copy";
+
+    const name = document.createElement("strong");
+    name.textContent = item.name;
+
+    const description = document.createElement("span");
+    description.className = "menu-option-description";
+    description.textContent = item.description;
+
+    const dietaryCodes = document.createElement("small");
+    dietaryCodes.className = "dietary-codes";
+    const dietary = Array.isArray(item.dietaryRestrictions)
+        ? item.dietaryRestrictions.join(" · ")
+        : String(item.dietaryRestrictions || "").trim();
+    dietaryCodes.textContent = dietary ? `Dietary: ${dietary}` : "No dietary information listed";
+
+    copy.append(name, description, dietaryCodes);
+    label.append(input, photo, radioMark, copy);
+    return label;
+}
+
+function renderMenu(menu) {
+    const mains = Array.isArray(menu?.mains) ? menu.mains : [];
+    const desserts = Array.isArray(menu?.desserts) ? menu.desserts : [];
+    const allItems = [...mains, ...desserts];
+    menuById = new Map(allItems.map((item) => [String(item.id), item]));
+
+    const mainOptions = document.getElementById("main-menu-options");
+    const dessertOptions = document.getElementById("dessert-menu-options");
+    mainOptions.replaceChildren();
+    dessertOptions.replaceChildren();
+
+    mains.forEach((item) => mainOptions.append(createMenuOption(item, "meal")));
+    desserts.forEach((item) => dessertOptions.append(createMenuOption(item, "dessert")));
+}
+
+function menuName(id) {
+    return menuById.get(String(id))?.name || "chosen";
+}
+
+function fillConfirmedDish(kind, id) {
+    const item = menuById.get(String(id));
+    const name = document.getElementById(`success-${kind}`);
+    const image = document.getElementById(`success-${kind}-image`);
+    const frame = image?.closest(".confirmed-dish");
+
+    name.textContent = item?.name || menuName(id);
+
+    if (!image) {
+        return;
+    }
+
+    if (item?.imageUrl) {
+        image.src = item.imageUrl;
+        image.alt = item.name;
+        if (frame) {
+            frame.hidden = false;
+        }
+        return;
+    }
+
+    image.removeAttribute("src");
+    image.alt = "";
+    if (frame) {
+        frame.hidden = true;
+    }
+}
+
+function showScreen(name, focusSelector) {
+    stopSuccessReturn();
+
+    screens.forEach((screen, screenName) => {
+        screen.hidden = screenName !== name;
+        if (screenName === name) {
+            screen.scrollTop = 0;
+        }
+    });
+
+    const stepMap = {
+        lookup: "find",
+        "not-found": "find",
+        dashboard: "invite",
+        meal: "rsvp",
+        success: "done",
+        declined: "done"
+    };
+    const order = ["find", "welcome", "invite", "rsvp", "done"];
+    const currentStep = stepMap[name] || "find";
+    const currentIndex = order.indexOf(currentStep);
+
+    document.querySelectorAll(".app-progress li").forEach((item) => {
+        const itemIndex = order.indexOf(item.dataset.step);
+        item.classList.toggle("is-current", item.dataset.step === currentStep);
+        item.classList.toggle("is-complete", itemIndex >= 0 && itemIndex < currentIndex);
+    });
+
+    window.requestAnimationFrame(() => {
+        const activeScreen = screens.get(name);
+        const focusTarget = focusSelector
+            ? activeScreen?.querySelector(focusSelector)
+            : activeScreen?.querySelector("h1, input, button");
+
+        if (focusTarget) {
+            focusTarget.setAttribute("tabindex", "-1");
+            focusTarget.focus({ preventScroll: true });
+            focusTarget.addEventListener("blur", () => focusTarget.removeAttribute("tabindex"), { once: true });
+        }
+    });
+
+    if (name === "success") {
+        startSuccessReturn();
+    }
+}
+
+function updateAttire(guest) {
+    const attire = guest.attire;
+    const preview = document.getElementById("dress-code");
+    const figure = preview.querySelector(".dress-guide");
+    const image = document.getElementById("dress-guide-image");
+    const palette = document.querySelector(".palette");
+    const colours = [attire?.primaryColor, attire?.secondaryColor].filter(Boolean);
+
+    palette.replaceChildren();
+    colours.forEach((colour) => {
+        const swatch = document.createElement("i");
+        swatch.style.setProperty("--swatch", colour);
+        palette.append(swatch);
+    });
+    palette.hidden = colours.length === 0;
+
+    const hasImage = Boolean(attire?.imageUrl);
+    preview.classList.toggle("has-guide", hasImage);
+    figure.hidden = !hasImage;
+    if (hasImage) {
+        image.src = attire.imageUrl;
+        image.alt = `${attire.attireName || "Attire"} reference for ${guest.fullName}`;
+    } else {
+        image.removeAttribute("src");
+        image.alt = "";
+    }
+
+    const attireName = attire?.attireName || attire?.displayName || "Attire details";
+    const description = attire?.description || "Please contact the bride or groom for your attire details.";
+    document.getElementById("look-badge").textContent = `${guest.role || "Guest"} · ${attireName}`;
+    document.getElementById("attire-theme").textContent = attire?.displayName || attireName;
+    document.getElementById("attire-title").textContent = attireName;
+    document.getElementById("attire-description").textContent = description;
+    document.getElementById("welcome-attire").textContent = description;
+}
+
+function hydrateGuest(guest) {
+    activeGuest = guest;
+    const role = guest.role || "Guest";
+    const fullName = guest.fullName;
+
+    document.getElementById("welcome-name").textContent = fullName;
+    document.getElementById("invite-for-name").textContent = fullName;
+    document.getElementById("role-badge").textContent = role;
+    document.getElementById("personal-welcome").textContent = `You're our ${role}. We're so happy to share our wedding day with you.`;
+    document.getElementById("invited-guest-name").textContent = fullName;
+    document.getElementById("success-name").textContent = fullName;
+    document.getElementById("success-role").textContent = role;
+    document.getElementById("declined-name").textContent = fullName;
+    updateAttire(guest);
+
+    mealForm.reset();
+    document.getElementById("dietary-requirements").value = guest.dietaryRequirements || "";
+    document.getElementById("meal-notes").value = guest.foodChoice?.notes || "";
+
+    const status = document.getElementById("current-rsvp-status");
+    if (guest.rsvpStatus === "attending") {
+        status.textContent = "Your current response is attending. You can update it below.";
+        status.hidden = false;
+    } else if (guest.rsvpStatus === "not_attending") {
+        status.textContent = "Your current response is not attending. You can change it below.";
+        status.hidden = false;
+    } else {
+        status.textContent = "";
+        status.hidden = true;
+    }
+
+    if (guest.foodChoice?.mainId) {
+        const existingMeal = Array.from(mealForm.querySelectorAll('input[name="meal"]'))
+            .find((input) => input.value === String(guest.foodChoice.mainId));
+        if (existingMeal) {
+            existingMeal.checked = true;
+        }
+    }
+
+    if (guest.foodChoice?.dessertId) {
+        const existingDessert = Array.from(mealForm.querySelectorAll('input[name="dessert"]'))
+            .find((input) => input.value === String(guest.foodChoice.dessertId));
+        if (existingDessert) {
+            existingDessert.checked = true;
+        }
+    }
+}
+
+async function parseResponse(response) {
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        const error = new Error(data.error || "Something went wrong. Please try again.");
+        error.status = response.status;
+        throw error;
+    }
+
+    return data;
+}
+
+async function findGuest(name) {
+    const response = await fetch(API.findGuest, {
+        method: "POST",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name })
+    });
+    return parseResponse(response);
+}
+
+async function getMenu() {
+    const response = await fetch(API.getMenu, { headers: { Accept: "application/json" } });
+    return parseResponse(response);
+}
+
+async function saveRsvp({ status, mainId = null, dessertId = null, dietaryRequirements = "", notes = "" }) {
+    if (!activeGuest?.token) {
+        throw new Error("Your invitation session has expired. Please look up your name again.");
+    }
+
+    const response = await fetch(API.submitRsvp, {
+        method: "POST",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            token: activeGuest.token,
+            status,
+            mainId,
+            dessertId,
+            dietaryRequirements,
+            notes
+        })
+    });
+
+    return parseResponse(response);
+}
+
+lookupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearInlineError(lookupError);
+
+    const name = normalizeName(guestNameInput.value);
+    if (name.length < 2) {
+        showInlineError(lookupError, "Please enter the full name shown on your invitation.");
+        guestNameInput.focus();
+        return;
+    }
+
+    try {
+        setLoading(lookupButton, true, "Finding your invitation…", "Get my invitation");
+        const data = await findGuest(name);
+        const menu = await getMenu();
+        renderMenu(menu);
+        hydrateGuest(data.guest);
+        showScreen("dashboard");
+    } catch (error) {
+        if (error.status === 404) {
+            showScreen("not-found");
+        } else {
+            showInlineError(lookupError, error.message);
+        }
+    } finally {
+        setLoading(lookupButton, false, "Finding your invitation…", "Get my invitation");
+    }
+});
+
+guestNameInput.addEventListener("input", () => clearInlineError(lookupError));
+
+document.querySelectorAll("[data-go]").forEach((control) => {
+    control.addEventListener("click", () => {
+        const destination = control.dataset.go;
+
+        if (destination !== "lookup" && !activeGuest) {
+            showScreen("lookup", "input");
+            return;
+        }
+
+        if (destination === "lookup") {
+            returnToLookup();
+            return;
+        }
+
+        showScreen(destination);
+    });
+});
+
+document.querySelector('[data-attending="true"]').addEventListener("click", () => {
+    if (submissionInProgress) {
+        return;
+    }
+    clearInlineError(attendanceError);
+    showScreen("meal");
+});
+
+document.querySelector('[data-attending="false"]').addEventListener("click", async () => {
+    if (submissionInProgress) {
+        return;
+    }
+
+    clearInlineError(attendanceError);
+    submissionInProgress = true;
+    document.querySelectorAll("[data-attending]").forEach((button) => { button.disabled = true; });
+    savingOverlay.hidden = false;
+
+    try {
+        const data = await saveRsvp({ status: "not_attending" });
+        activeGuest = { ...activeGuest, ...data.guest };
+        hydrateGuest(activeGuest);
+        showScreen("declined");
+    } catch (error) {
+        showInlineError(attendanceError, error.message);
+    } finally {
+        savingOverlay.hidden = true;
+        submissionInProgress = false;
+        document.querySelectorAll("[data-attending]").forEach((button) => { button.disabled = false; });
+    }
+});
+
+mealForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (submissionInProgress) {
+        return;
+    }
+
+    clearInlineError(mealError);
+
+    const formData = new FormData(mealForm);
+    const mainId = formData.get("meal");
+    const dessertId = formData.get("dessert");
+    const dietaryRequirements = String(formData.get("dietaryRequirements") || "").trim();
+    const notes = String(formData.get("notes") || "").trim();
+
+    if (!mainId) {
+        showInlineError(mealError, "Please choose one main before saving your RSVP.");
+        mealForm.querySelector('input[name="meal"]')?.focus();
+        return;
+    }
+
+    if (!dessertId) {
+        showInlineError(mealError, "Please choose one dessert before saving your RSVP.");
+        mealForm.querySelector('input[name="dessert"]')?.focus();
+        return;
+    }
+
+    try {
+        submissionInProgress = true;
+        setLoading(saveRsvpButton, true, "Saving your response…", "Save preferences");
+        const data = await saveRsvp({
+            status: "attending",
+            mainId,
+            dessertId,
+            dietaryRequirements,
+            notes
+        });
+        activeGuest = { ...activeGuest, ...data.guest };
+        hydrateGuest(activeGuest);
+        fillConfirmedDish("meal", mainId);
+        fillConfirmedDish("dessert", dessertId);
+        showScreen("success");
+    } catch (error) {
+        showInlineError(mealError, error.message);
+    } finally {
+        submissionInProgress = false;
+        setLoading(saveRsvpButton, false, "Saving your response…", "Save preferences");
+    }
+});
+
+mealForm.addEventListener("change", () => clearInlineError(mealError));
+
+document.querySelectorAll(".dashboard-nav a").forEach((link) => {
+    link.addEventListener("click", (event) => {
+        const href = link.getAttribute("href");
+        const target = document.querySelector(href);
+        if (!target) {
+            return;
+        }
+
+        event.preventDefault();
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+});
+
+const INVITATION_PAGES = [
+    {
+        src: "img/1.png",
+        alt: "Invitation page 1 of 5: Jhon Aries and Charmnie Jade invite you to their wedding"
+    },
+    {
+        src: "img/2.png",
+        alt: "Invitation page 2 of 5"
+    },
+    {
+        src: "img/3.png",
+        alt: "Invitation page 3 of 5: the wedding entourage"
+    },
+    {
+        src: "img/4.png",
+        alt: "Invitation page 4 of 5"
+    },
+    {
+        src: "img/5.png",
+        alt: "Invitation page 5 of 5"
+    }
+];
+
+const invitationLightbox = document.getElementById("invitation-lightbox");
+const invitationPageImage = document.getElementById("invitation-page-image");
+const invitationPageLabel = document.getElementById("invitation-page-label");
+const entourageLightbox = document.getElementById("entourage-lightbox");
+let invitationPage = 0;
+
+function renderInvitationPage() {
+    const page = INVITATION_PAGES[invitationPage];
+    invitationPageImage.src = page.src;
+    invitationPageImage.alt = page.alt;
+    invitationPageLabel.textContent = `${invitationPage + 1} / ${INVITATION_PAGES.length}`;
+}
+
+function openInvitationLightbox(startPage = 0) {
+    invitationPage = startPage;
+    renderInvitationPage();
+    INVITATION_PAGES.forEach((page) => {
+        const preload = new Image();
+        preload.src = page.src;
+    });
+    invitationLightbox.hidden = false;
+}
+
+function closeInvitationLightbox() {
+    invitationLightbox.hidden = true;
+}
+
+function stepInvitationPage(step) {
+    invitationPage = (invitationPage + step + INVITATION_PAGES.length) % INVITATION_PAGES.length;
+    renderInvitationPage();
+}
+
+function closeEntourageLightbox() {
+    entourageLightbox.hidden = true;
+}
+
+document.getElementById("invitation-open").addEventListener("click", () => {
+    openInvitationLightbox(0);
+});
+
+document.getElementById("invitation-artwork-open").addEventListener("click", () => {
+    openInvitationLightbox(0);
+});
+
+document.getElementById("invitation-prev").addEventListener("click", () => {
+    stepInvitationPage(-1);
+});
+
+document.getElementById("invitation-next").addEventListener("click", () => {
+    stepInvitationPage(1);
+});
+
+invitationLightbox.addEventListener("click", (event) => {
+    if (event.target === invitationLightbox || event.target.classList.contains("lightbox-close")) {
+        closeInvitationLightbox();
+    }
+});
+
+document.getElementById("entourage-button").addEventListener("click", () => {
+    entourageLightbox.hidden = false;
+});
+
+entourageLightbox.addEventListener("click", (event) => {
+    if (event.target === entourageLightbox || event.target.classList.contains("lightbox-close")) {
+        closeEntourageLightbox();
+    }
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !invitationLightbox.hidden) {
+        closeInvitationLightbox();
+        return;
+    }
+
+    if (!invitationLightbox.hidden && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        stepInvitationPage(event.key === "ArrowLeft" ? -1 : 1);
+        return;
+    }
+
+    if (event.key === "Escape" && !entourageLightbox.hidden) {
+        closeEntourageLightbox();
+    }
+});
+
+document.getElementById("calendar-button").addEventListener("click", () => {
+    const calendar = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Jhon Aries and Charmnie Jade//Wedding//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        "UID:wedding-20261219@jhonaries-charmniejade",
+        "DTSTAMP:20260907T000000Z",
+        "DTSTART:20261219T030000Z",
+        "DTEND:20261219T100000Z",
+        "SUMMARY:Jhon Aries & Charmnie Jade’s Wedding",
+        "LOCATION:Pemberton Gardens\\, 210 Tosswill Rd\\, Prebbleton\\, Christchurch",
+        "DESCRIPTION:We can’t wait to celebrate with you!",
+        "END:VEVENT",
+        "END:VCALENDAR"
+    ].join("\r\n");
+
+    stopSuccessReturn();
+    startSuccessReturn();
+    const blob = new Blob([calendar], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "jhon-aries-and-charmnie-jade-wedding.ics";
+    link.rel = "noopener";
+    link.style.display = "none";
+    document.body.append(link);
+    link.click();
+    window.setTimeout(() => {
+        link.remove();
+        URL.revokeObjectURL(url);
+    }, 60_000);
+});
+
 const weddingMusic = document.getElementById("wedding-music");
 const musicToggle = document.getElementById("music-toggle");
 const musicLabel = musicToggle.querySelector(".music-label");
 weddingMusic.volume = 0.25;
-
-const rsvpForm = document.getElementById("rsvp-form");
-const codeInput = document.getElementById("rsvp-code");
-const validateCodeButton = document.getElementById("validate-code");
-const changeCodeButton = document.getElementById("change-code");
-const codeStep = document.getElementById("code-step");
-const guestStep = document.getElementById("guest-step");
-const guestCheckboxes = document.getElementById("guest-checkboxes");
-const seatSummary = document.getElementById("seat-summary");
-const codeError = document.getElementById("code-error");
-
-let activeInvitation = null;
 
 function updateMusicControl(isPlaying) {
     musicToggle.classList.toggle("is-playing", isPlaying);
@@ -28,24 +660,7 @@ function updateMusicControl(isPlaying) {
     musicLabel.textContent = isPlaying ? "Pause music" : "Play music";
 }
 
-musicToggle.addEventListener("click", async () => {
-    if (weddingMusic.paused) {
-        try {
-            await weddingMusic.play();
-            updateMusicControl(true);
-        } catch {
-            updateMusicControl(false);
-        }
-    } else {
-        weddingMusic.pause();
-        updateMusicControl(false);
-    }
-});
-
-weddingMusic.addEventListener("play", () => updateMusicControl(true));
-weddingMusic.addEventListener("pause", () => updateMusicControl(false));
-
-async function attemptMusicAutoplay() {
+async function attemptMusicPlayback() {
     try {
         await weddingMusic.play();
         updateMusicControl(true);
@@ -56,17 +671,32 @@ async function attemptMusicAutoplay() {
     }
 }
 
-async function playMusicOnFirstInteraction() {
+musicToggle.addEventListener("click", async () => {
     if (weddingMusic.paused) {
-        await attemptMusicAutoplay();
+        await attemptMusicPlayback();
+    } else {
+        weddingMusic.pause();
     }
+});
 
+weddingMusic.addEventListener("play", () => updateMusicControl(true));
+weddingMusic.addEventListener("pause", () => updateMusicControl(false));
+
+async function playMusicOnFirstInteraction(event) {
     ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
         document.removeEventListener(eventName, playMusicOnFirstInteraction);
     });
+
+    if (event.target instanceof Element && event.target.closest("#music-toggle")) {
+        return;
+    }
+
+    if (weddingMusic.paused) {
+        await attemptMusicPlayback();
+    }
 }
 
-attemptMusicAutoplay().then((started) => {
+attemptMusicPlayback().then((started) => {
     if (!started) {
         ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
             document.addEventListener(eventName, playMusicOnFirstInteraction, { once: true });
@@ -74,459 +704,8 @@ attemptMusicAutoplay().then((started) => {
     }
 });
 
-function closeNavigation() {
-    menuToggle.setAttribute("aria-expanded", "false");
-    menuToggle.setAttribute("aria-label", "Open navigation");
-    mainNavigation.classList.remove("is-open");
+const queryName = normalizeName(new URLSearchParams(window.location.search).get("name"));
+if (queryName) {
+    guestNameInput.value = queryName;
+    lookupForm.requestSubmit();
 }
-
-menuToggle.addEventListener("click", () => {
-    const isOpen = menuToggle.getAttribute("aria-expanded") === "true";
-    menuToggle.setAttribute("aria-expanded", String(!isOpen));
-    menuToggle.setAttribute("aria-label", isOpen ? "Open navigation" : "Close navigation");
-    mainNavigation.classList.toggle("is-open", !isOpen);
-});
-
-mainNavigation.querySelectorAll("a").forEach((link) => {
-    link.addEventListener("click", closeNavigation);
-});
-
-window.addEventListener("resize", () => {
-    if (window.innerWidth > 760) {
-        closeNavigation();
-    }
-});
-
-const invitationPages = document.querySelectorAll(".invitation-page");
-const invitationCarousel = document.querySelector(".invitation-carousel");
-const invitationTrack = document.getElementById("invitation-track");
-const invitationDots = Array.from(document.querySelectorAll(".invitation-dots button"));
-const invitationPrevious = document.querySelector(".invitation-previous");
-const invitationNext = document.querySelector(".invitation-next");
-const invitationLightbox = document.getElementById("invitation-lightbox");
-const lightboxContent = invitationLightbox.querySelector(".lightbox-content");
-const lightboxImage = document.getElementById("lightbox-image");
-const lightboxTitle = document.getElementById("lightbox-title");
-let lastFocusedInvitation = null;
-let activeInvitationPage = 0;
-let invitationTouchStartX = 0;
-let invitationAutoplay = null;
-let lightboxPanX = 0;
-let lightboxPanY = 0;
-let lightboxDragStartX = 0;
-let lightboxDragStartY = 0;
-let isDraggingInvitation = false;
-let suppressInvitationZoomClick = false;
-
-function applyInvitationPan() {
-    lightboxImage.style.transform =
-        `translate(calc(-50% + ${lightboxPanX}px), calc(-50% + ${lightboxPanY}px))`;
-}
-
-function resetInvitationPan() {
-    lightboxPanX = 0;
-    lightboxPanY = 0;
-    lightboxImage.style.transform = "";
-    lightboxImage.classList.remove("is-dragging");
-    isDraggingInvitation = false;
-}
-
-function positionInvitationCarousel() {
-    const pages = Array.from(invitationPages);
-    const activePage = pages[activeInvitationPage];
-    const viewport = invitationCarousel.querySelector(".invitation-viewport");
-    const offset = (viewport.clientWidth - activePage.offsetWidth) / 2 - activePage.offsetLeft;
-
-    invitationTrack.style.transform = `translateX(${offset}px)`;
-
-    pages.forEach((page, index) => {
-        page.classList.toggle("is-active", index === activeInvitationPage);
-    });
-
-    invitationDots.forEach((dot, index) => {
-        const isActive = index === activeInvitationPage;
-        dot.classList.toggle("is-active", isActive);
-        dot.setAttribute("aria-current", isActive ? "true" : "false");
-    });
-}
-
-function showInvitationPage(index) {
-    activeInvitationPage = (index + invitationPages.length) % invitationPages.length;
-    positionInvitationCarousel();
-}
-
-function stopInvitationAutoplay() {
-    window.clearInterval(invitationAutoplay);
-    invitationAutoplay = null;
-}
-
-function startInvitationAutoplay() {
-    stopInvitationAutoplay();
-
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        invitationAutoplay = window.setInterval(() => showInvitationPage(activeInvitationPage + 1), 5_000);
-    }
-}
-
-function restartInvitationAutoplay() {
-    stopInvitationAutoplay();
-    startInvitationAutoplay();
-}
-
-function openInvitationLightbox(page) {
-    lastFocusedInvitation = page;
-    lightboxContent.classList.remove("is-zoomed");
-    resetInvitationPan();
-    lightboxImage.src = page.dataset.fullImage;
-    lightboxImage.alt = page.querySelector("img").alt;
-    lightboxImage.setAttribute("aria-label", "Zoom in on invitation");
-    lightboxImage.setAttribute("aria-pressed", "false");
-    lightboxTitle.textContent = page.dataset.title;
-    invitationLightbox.hidden = false;
-    document.body.style.overflow = "hidden";
-    invitationLightbox.querySelector(".lightbox-close").focus();
-}
-
-function closeInvitationLightbox() {
-    invitationLightbox.hidden = true;
-    lightboxContent.classList.remove("is-zoomed");
-    resetInvitationPan();
-    lightboxImage.src = "";
-    document.body.style.overflow = "";
-    lastFocusedInvitation?.focus();
-}
-
-function toggleInvitationZoom() {
-    if (isDraggingInvitation || suppressInvitationZoomClick) {
-        suppressInvitationZoomClick = false;
-        return;
-    }
-
-    const isZoomed = lightboxContent.classList.toggle("is-zoomed");
-    resetInvitationPan();
-    lightboxImage.setAttribute("aria-pressed", String(isZoomed));
-    lightboxImage.setAttribute(
-        "aria-label",
-        isZoomed ? "Zoom out from invitation" : "Zoom in on invitation"
-    );
-
-}
-
-lightboxImage.addEventListener("click", toggleInvitationZoom);
-lightboxImage.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        toggleInvitationZoom();
-    }
-});
-
-lightboxImage.addEventListener("pointerdown", (event) => {
-    if (!lightboxContent.classList.contains("is-zoomed")) {
-        return;
-    }
-
-    event.preventDefault();
-    isDraggingInvitation = true;
-    suppressInvitationZoomClick = false;
-    lightboxDragStartX = event.clientX - lightboxPanX;
-    lightboxDragStartY = event.clientY - lightboxPanY;
-    lightboxImage.classList.add("is-dragging");
-    lightboxImage.setPointerCapture(event.pointerId);
-});
-
-lightboxImage.addEventListener("pointermove", (event) => {
-    if (!isDraggingInvitation) {
-        return;
-    }
-
-    lightboxPanX = event.clientX - lightboxDragStartX;
-    lightboxPanY = event.clientY - lightboxDragStartY;
-    if (Math.abs(lightboxPanX) > 5 || Math.abs(lightboxPanY) > 5) {
-        suppressInvitationZoomClick = true;
-    }
-    applyInvitationPan();
-});
-
-function stopInvitationDrag(event) {
-    if (!isDraggingInvitation) {
-        return;
-    }
-
-    isDraggingInvitation = false;
-    lightboxImage.classList.remove("is-dragging");
-
-    if (lightboxImage.hasPointerCapture(event.pointerId)) {
-        lightboxImage.releasePointerCapture(event.pointerId);
-    }
-}
-
-lightboxImage.addEventListener("pointerup", stopInvitationDrag);
-lightboxImage.addEventListener("pointercancel", stopInvitationDrag);
-
-invitationPages.forEach((page) => {
-    page.addEventListener("click", () => openInvitationLightbox(page));
-});
-
-invitationPrevious.addEventListener("click", () => {
-    showInvitationPage(activeInvitationPage - 1);
-    restartInvitationAutoplay();
-});
-
-invitationNext.addEventListener("click", () => {
-    showInvitationPage(activeInvitationPage + 1);
-    restartInvitationAutoplay();
-});
-
-invitationDots.forEach((dot, index) => {
-    dot.addEventListener("click", () => {
-        showInvitationPage(index);
-        restartInvitationAutoplay();
-    });
-});
-
-invitationCarousel.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowLeft") {
-        showInvitationPage(activeInvitationPage - 1);
-        restartInvitationAutoplay();
-    }
-
-    if (event.key === "ArrowRight") {
-        showInvitationPage(activeInvitationPage + 1);
-        restartInvitationAutoplay();
-    }
-});
-
-invitationCarousel.addEventListener("touchstart", (event) => {
-    stopInvitationAutoplay();
-    invitationTouchStartX = event.changedTouches[0].clientX;
-}, { passive: true });
-
-invitationCarousel.addEventListener("touchend", (event) => {
-    const distance = event.changedTouches[0].clientX - invitationTouchStartX;
-
-    if (Math.abs(distance) >= 45) {
-        showInvitationPage(activeInvitationPage + (distance < 0 ? 1 : -1));
-    }
-
-    startInvitationAutoplay();
-}, { passive: true });
-
-invitationCarousel.addEventListener("mouseenter", stopInvitationAutoplay);
-invitationCarousel.addEventListener("mouseleave", startInvitationAutoplay);
-invitationCarousel.addEventListener("focusin", stopInvitationAutoplay);
-invitationCarousel.addEventListener("focusout", startInvitationAutoplay);
-
-invitationLightbox.querySelectorAll("[data-close-lightbox]").forEach((control) => {
-    control.addEventListener("click", closeInvitationLightbox);
-});
-
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !invitationLightbox.hidden) {
-        closeInvitationLightbox();
-    }
-});
-
-window.addEventListener("resize", positionInvitationCarousel);
-
-positionInvitationCarousel();
-startInvitationAutoplay();
-
-function updateCountdown() {
-    const remaining = Math.max(weddingDate.getTime() - Date.now(), 0);
-
-    const values = {
-        days: Math.floor(remaining / 86_400_000),
-        hours: Math.floor((remaining % 86_400_000) / 3_600_000),
-        minutes: Math.floor((remaining % 3_600_000) / 60_000),
-        seconds: Math.floor((remaining % 60_000) / 1_000)
-    };
-
-    units.forEach((unit) => {
-        document.getElementById(unit).textContent = values[unit];
-    });
-}
-
-updateCountdown();
-setInterval(updateCountdown, 1_000);
-
-function updateRsvpCountdown() {
-    const remaining = Math.max(rsvpDeadline.getTime() - Date.now(), 0);
-    const values = {
-        days: Math.floor(remaining / 86_400_000),
-        hours: Math.floor((remaining % 86_400_000) / 3_600_000),
-        minutes: Math.floor((remaining % 3_600_000) / 60_000),
-        seconds: Math.floor((remaining % 60_000) / 1_000)
-    };
-
-    units.forEach((unit) => {
-        document.getElementById(`rsvp-${unit}`).textContent = values[unit];
-    });
-
-    if (remaining === 0) {
-        document.getElementById("rsvp-form").classList.add("is-closed");
-        document.getElementById("rsvp-closed-message").hidden = false;
-    }
-}
-
-updateRsvpCountdown();
-setInterval(updateRsvpCountdown, 1_000);
-
-function normalizeCode(value) {
-    return value.trim().toUpperCase();
-}
-
-function showCodeError(message) {
-    codeError.textContent = message;
-    codeError.hidden = false;
-    codeInput.setAttribute("aria-invalid", "true");
-    codeInput.focus();
-}
-
-function clearCodeError() {
-    codeError.textContent = "";
-    codeError.hidden = true;
-    codeInput.removeAttribute("aria-invalid");
-}
-
-function renderGuestOptions(code, invitation) {
-    guestCheckboxes.replaceChildren();
-
-    invitation.names.forEach((name, index) => {
-        const label = document.createElement("label");
-        const checkbox = document.createElement("input");
-        const labelText = document.createElement("span");
-
-        label.className = "guest-option";
-        checkbox.type = "checkbox";
-        checkbox.value = name;
-        checkbox.id = `guest-${index}`;
-        labelText.textContent = name;
-
-        label.append(checkbox, labelText);
-        guestCheckboxes.append(label);
-    });
-
-    const seatWord = invitation.maxSeats === 1 ? "seat" : "seats";
-    seatSummary.textContent = `This invitation includes up to ${invitation.maxSeats} ${seatWord}.`;
-}
-
-async function validateInvitationCode() {
-    const code = normalizeCode(codeInput.value);
-
-    clearCodeError();
-
-    if (!code) {
-        showCodeError("Please enter your invitation code.");
-        return;
-    }
-
-    try {
-        validateCodeButton.textContent = "Checking...";
-        validateCodeButton.disabled = true;
-
-        const response = await fetch(`/.netlify/functions/getGuests?code=${encodeURIComponent(code)}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-            showCodeError(data.error || "Invitation code not found.");
-            return;
-        }
-
-        activeInvitation = {
-            code: data.code,
-            names: data.guests.map((guest) => guest.name),
-            maxSeats: data.guests.length
-        };
-
-        codeInput.value = data.code;
-        renderGuestOptions(data.code, activeInvitation);
-
-        codeStep.hidden = true;
-        guestStep.hidden = false;
-        guestStep.querySelector("input")?.focus();
-    } catch (error) {
-        showCodeError("Something went wrong. Please try again.");
-    } finally {
-        validateCodeButton.textContent = "Find Invitation";
-        validateCodeButton.disabled = false;
-    }
-}
-
-function resetInvitationCode() {
-    activeInvitation = null;
-    rsvpForm.reset();
-    guestCheckboxes.replaceChildren();
-
-    guestStep.hidden = true;
-    codeStep.hidden = false;
-
-    clearCodeError();
-    codeInput.focus();
-}
-
-validateCodeButton.addEventListener("click", validateInvitationCode);
-
-codeInput.addEventListener("input", () => {
-    codeInput.value = codeInput.value.toUpperCase();
-    clearCodeError();
-});
-
-codeInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        validateInvitationCode();
-    }
-});
-
-changeCodeButton.addEventListener("click", resetInvitationCode);
-
-rsvpForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!activeInvitation) {
-        showCodeError("Please enter and validate your invitation code first.");
-        return;
-    }
-
-    const selectedNames = Array.from(
-        guestCheckboxes.querySelectorAll('input[type="checkbox"]:checked'),
-        (checkbox) => checkbox.value
-    );
-
-    const submitButton = rsvpForm.querySelector('button[type="submit"]');
-
-    try {
-        submitButton.textContent = "Sending...";
-        submitButton.disabled = true;
-
-        const response = await fetch("/.netlify/functions/updateRsvp", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                code: activeInvitation.code,
-                attendingGuests: selectedNames
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            alert(data.error || "Could not save RSVP.");
-            submitButton.textContent = "Send RSVP";
-            submitButton.disabled = false;
-            return;
-        }
-
-        guestStep.innerHTML = `
-            <p class="eyebrow">Thank you</p>
-            <h3>Your RSVP has been received.</h3>
-            <p class="form-help">We are grateful for your response.</p>
-        `;
-    } catch (error) {
-        alert("Something went wrong. Please try again.");
-        submitButton.textContent = "Send RSVP";
-        submitButton.disabled = false;
-    }
-});
