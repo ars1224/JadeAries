@@ -233,6 +233,32 @@ test("migration validates courses, upserts food, and deletes food for declines",
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
+test("image migration maps all approved Netlify assets", () => {
+  const migrationPath = path.join(
+    __dirname,
+    "..",
+    "database",
+    "migrations",
+    "005_populate_image_urls.sql"
+  );
+  const sql = fs.readFileSync(migrationPath, "utf8");
+  const imagePaths = [...sql.matchAll(/'(\/images\/(?:attire|food)\/[^']+)'/g)]
+    .map((match) => match[1]);
+
+  assert.equal(new Set(imagePaths).size, 23);
+  imagePaths.forEach((assetPath) => {
+    assert.equal(fs.existsSync(path.join(__dirname, "..", assetPath)), true, assetPath);
+  });
+
+  assert.match(sql, /\('Groomsman', '\/images\/attire\/groomsmen-suit-reference\.jpg'\)/);
+  assert.match(sql, /\('Ring Bearer', '\/images\/attire\/bearers-suit-reference\.jpg'\)/);
+  assert.match(sql, /\('Coin Bearer', '\/images\/attire\/bearers-suit-reference\.jpg'\)/);
+  assert.match(sql, /\('Bible Bearer', '\/images\/attire\/bearers-suit-reference\.jpg'\)/);
+  assert.match(sql, /\('Flower Girl', '\/images\/attire\/flower-girls-dress-reference\.png'\)/);
+  assert.match(sql, /\('Officiant', '\/images\/attire\/officiant-attire-reference\.png'\)/);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
 test("frontend keeps full names intact, blocks duplicate submits, and preserves music", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   const script = fs.readFileSync(path.join(__dirname, "..", "js", "script.js"), "utf8");
@@ -243,5 +269,8 @@ test("frontend keeps full names intact, blocks duplicate submits, and preserves 
   assert.match(script, /if \(submissionInProgress\)/);
   assert.match(html, /id="wedding-music"[\s\S]*\.mp3/);
   assert.match(script, /weddingMusic\.play\(\)/);
+  assert.match(script, /showPhotoFallback/);
+  assert.match(script, /image\.onerror = showFallback/);
   assert.match(css, /@media \(max-width: 719px\)/);
+  assert.match(css, /Photo unavailable/);
 });

@@ -83,6 +83,16 @@ function clearInlineError(element) {
     element.hidden = true;
 }
 
+function showPhotoFallback(photo, label = "Photo unavailable") {
+    photo.classList.remove("has-image");
+    photo.replaceChildren();
+
+    const fallback = document.createElement("span");
+    fallback.className = "image-fallback";
+    fallback.textContent = label;
+    photo.append(fallback);
+}
+
 function createMenuOption(item, fieldName) {
     const label = document.createElement("label");
     label.className = "choice-card meal-option";
@@ -102,10 +112,14 @@ function createMenuOption(item, fieldName) {
 
     if (item.imageUrl) {
         const image = document.createElement("img");
-        image.src = item.imageUrl;
         image.alt = "";
         image.loading = "lazy";
+        image.addEventListener("load", () => photo.classList.add("has-image"), { once: true });
+        image.addEventListener("error", () => showPhotoFallback(photo), { once: true });
         photo.append(image);
+        image.src = item.imageUrl;
+    } else {
+        showPhotoFallback(photo);
     }
 
     const copy = document.createElement("span");
@@ -161,20 +175,24 @@ function fillConfirmedDish(kind, id) {
         return;
     }
 
+    const showFallback = () => {
+        image.removeAttribute("src");
+        image.alt = "";
+        image.hidden = true;
+        frame?.classList.remove("has-image");
+    };
+
+    image.onerror = null;
     if (item?.imageUrl) {
+        image.onerror = showFallback;
         image.src = item.imageUrl;
         image.alt = item.name;
-        if (frame) {
-            frame.hidden = false;
-        }
+        image.hidden = false;
+        frame?.classList.add("has-image");
         return;
     }
 
-    image.removeAttribute("src");
-    image.alt = "";
-    if (frame) {
-        frame.hidden = true;
-    }
+    showFallback();
 }
 
 function showScreen(name, focusSelector) {
@@ -239,15 +257,23 @@ function updateAttire(guest) {
     });
     palette.hidden = colours.length === 0;
 
-    const hasImage = Boolean(attire?.imageUrl);
-    preview.classList.toggle("has-guide", hasImage);
-    figure.hidden = !hasImage;
-    if (hasImage) {
-        image.src = attire.imageUrl;
-        image.alt = `${attire.attireName || "Attire"} reference for ${guest.fullName}`;
-    } else {
+    const showFallback = () => {
+        preview.classList.remove("has-guide");
+        figure.hidden = true;
         image.removeAttribute("src");
         image.alt = "";
+    };
+    const hasImage = Boolean(attire?.imageUrl);
+
+    image.onerror = null;
+    if (hasImage) {
+        image.onerror = showFallback;
+        image.src = attire.imageUrl;
+        image.alt = `${attire.attireName || "Attire"} reference for ${guest.fullName}`;
+        figure.hidden = false;
+        preview.classList.add("has-guide");
+    } else {
+        showFallback();
     }
 
     const attireName = attire?.attireName || attire?.displayName || "Attire details";

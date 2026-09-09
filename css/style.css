@@ -793,10 +793,12 @@ address {
 }
 
 .menu-option-photo {
+    align-items: center;
     aspect-ratio: 4 / 3;
     background: #ece6d4;
     border-radius: 14px;
-    display: block;
+    display: flex;
+    justify-content: center;
     overflow: hidden;
 }
 
@@ -805,6 +807,15 @@ address {
     height: 100%;
     object-fit: cover;
     width: 100%;
+}
+
+.image-fallback {
+    color: var(--muted);
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    padding: 16px;
+    text-align: center;
+    text-transform: uppercase;
 }
 
 .menu-option-copy {
@@ -934,6 +945,20 @@ address {
     margin: 0;
 }
 
+.confirmed-dish:not(.has-image)::before {
+    align-items: center;
+    aspect-ratio: 4 / 3;
+    background: #ece6d4;
+    border-radius: 12px;
+    color: var(--muted);
+    content: "Photo unavailable";
+    display: flex;
+    font-size: 0.64rem;
+    justify-content: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 .confirmed-dish img {
     aspect-ratio: 4 / 3;
     background: #ece6d4;
@@ -941,6 +966,10 @@ address {
     display: block;
     object-fit: cover;
     width: 100%;
+}
+
+.confirmed-dish img[hidden] {
+    display: none;
 }
 
 .confirmed-dish figcaption {

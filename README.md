@@ -6,15 +6,19 @@ The existing invitation design is paired with a private, name-based RSVP flow:
 
 Supabase credentials are used only inside Netlify Functions. The browser receives a short-lived signed guest token after an exact name match; it never receives the service-role key or unrestricted table access.
 
-## Required Supabase migration
+## Required Supabase migrations
 
-The existing Supabase tables and data remain in place. Run only:
+The existing Supabase tables and data remain in place. Run these migrations in order:
 
 `database/migrations/004_supabase_personalized_rsvp.sql`
+
+`database/migrations/005_populate_image_urls.sql`
 
 This adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
 
 The older `database/schema.sql` and migrations `001`–`003` belong to an abandoned direct-PostgreSQL prototype in this working tree. Do not run or import them into the prepared `aries-jade-wedding` Supabase project.
+
+Migration `005` maps all approved attire and menu photos to root-relative `/images/attire/` and `/images/food/` paths served by Netlify.
 
 ## Netlify environment variables
 
