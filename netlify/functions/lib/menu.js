@@ -82,6 +82,36 @@ const MENU_ITEMS = Object.freeze([
   },
 ]);
 
+function normalizeMenuName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[–—−]/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+const PRIVATE_PRICE_BY_NAME = new Map(
+  MENU_ITEMS.map((item) => [normalizeMenuName(item.name), Number(item.price || 0)])
+);
+
+function privateMenuPrice(name) {
+  return PRIVATE_PRICE_BY_NAME.get(normalizeMenuName(name)) || 0;
+}
+
+function normalizeDietaryCodes(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value !== "string") {
+    return [];
+  }
+  return value
+    .replace(/^\{|\}$/g, "")
+    .split(",")
+    .map((item) => item.replace(/^"|"$/g, "").trim())
+    .filter(Boolean);
+}
+
 const MAIN_CHOICES = new Set(
   MENU_ITEMS.filter((item) => item.category === "main").map((item) => item.slug)
 );
@@ -153,6 +183,9 @@ module.exports = {
   MAIN_CHOICES,
   DESSERT_CHOICES,
   publicMenuItems,
+  privateMenuPrice,
+  normalizeDietaryCodes,
+  normalizeMenuName,
   toSqlTextArray,
   ensureMenuItems,
   withMenuRetry,

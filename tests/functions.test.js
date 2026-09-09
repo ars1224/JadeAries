@@ -322,6 +322,12 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
       rsvp_status: attending ? "attending" : (notAttending ? "not_attending" : "pending"),
       responded_at: attending || notAttending ? "2026-09-09T05:00:00Z" : null,
       dietary_requirements: index === 0 ? "Nut allergy" : "",
+      attire_profiles: index === 0 ? {
+        display_name: "Guest attire",
+        attire_name: "Whimsical Pastel Semi-formal",
+        attire_description: "Wear a whimsical pastel shade.",
+        image_url: "/images/attire/guest-attire-reference.jpg",
+      } : null,
       guest_food_choices: attending ? [{
         main_id: index < 12 ? "main-beef" : "main-salmon",
         dessert_id: "dessert-tiramisu",
@@ -337,6 +343,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath) => {
     if (requestPath.startsWith("guests?")) {
       assert.doesNotMatch(requestPath, /legacy_id|attire_profile_id/);
+      assert.match(requestPath, /attire_profiles/);
       return guestRows;
     }
     if (requestPath.startsWith("food_options?")) {
@@ -359,13 +366,23 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
     dessertSelections: 30,
     mealSelections: 30,
     dietaryRequirements: 1,
+    cateringTotal: 2466,
   });
   assert.deepEqual(body.catering.mains.map(({ name, count }) => ({ name, count })), [
     { name: "Roasted Beef Fillet – 180g", count: 12 },
     { name: "Lemon Baked Salmon – 170g", count: 18 },
   ]);
   assert.equal(body.catering.desserts[0].count, 30);
+  assert.equal(body.catering.mains[0].unitPrice, 62);
+  assert.equal(body.catering.mains[0].subtotal, 744);
+  assert.equal(body.menu[0].price, 62);
   assert.equal(body.guests[0].foodNotes, "Sauce on the side");
+  assert.deepEqual(body.guests[0].attire, {
+    displayName: "Guest attire",
+    attireName: "Whimsical Pastel Semi-formal",
+    description: "Wear a whimsical pastel shade.",
+    imageUrl: "/images/attire/guest-attire-reference.jpg",
+  });
   assert.doesNotMatch(response.body, /SUPABASE|service-role|legacy_id|ADMIN_PASSWORD/i);
 });
 
@@ -396,21 +413,81 @@ test("Supabase catering export uses current food names and accurate selection to
       guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
     },
   ], [
-    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g" },
+    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g", dietary_restrictions: "D, DO" },
     { id: "dessert-1", course: "dessert", name: "Classic Tiramisu" },
   ]);
 
   assert.equal(report.mainCount, 2);
   assert.equal(report.dessertCount, 2);
   assert.equal(report.sections[0].items[0].name, "Roasted Beef Fillet – 180g");
+  assert.equal(report.sections[0].items[0].unitPrice, 62);
+  assert.equal(report.sections[0].items[0].subtotal, 124);
+  assert.deepEqual(report.sections[0].items[0].dietaryCodes, ["D", "DO"]);
   assert.equal(report.sections[1].items[0].name, "Classic Tiramisu");
   assert.equal(report.sections[0].items[0].orders[0].dietaryRequirements, "Gluten free");
+});
+
+test("Supabase catering report produces valid PDF and Excel files when dietary codes are strings", async () => {
+  const {
+    buildSupabaseFoodReport,
+    createExcel,
+    createPdf,
+  } = require("../netlify/functions/exportFoodReport");
+  const report = buildSupabaseFoodReport([
+    {
+      full_name: "Guest One",
+      rsvp_status: "attending",
+      dietary_requirements: "",
+      guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
+    },
+  ], [
+    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g", dietary_restrictions: "D, DO" },
+    { id: "dessert-1", course: "dessert", name: "Classic Tiramisu", dietary_restrictions: "" },
+  ]);
+
+  const [pdf, excel] = await Promise.all([createPdf(report), createExcel(report)]);
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(excel.subarray(0, 2).toString(), "PK");
+  assert.ok(pdf.length > 1_000);
+  assert.ok(excel.length > 1_000);
+});
+
+test("authenticated catering export handler returns downloadable PDF and Excel responses", async () => {
+  const guestRows = [{
+    full_name: "Guest One",
+    rsvp_status: "attending",
+    dietary_requirements: "",
+    guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
+  }];
+  const optionRows = [
+    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g", dietary_restrictions: "D, DO" },
+    { id: "dessert-1", course: "dessert", name: "Classic Tiramisu", dietary_restrictions: "" },
+  ];
+  const handler = loadHandler("../netlify/functions/exportFoodReport", async (requestPath) => (
+    requestPath.startsWith("guests?") ? guestRows : optionRows
+  ));
+
+  for (const [format, contentType, signature] of [
+    ["pdf", "application/pdf", "%PDF-"],
+    ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "PK"],
+  ]) {
+    const response = await handler({
+      httpMethod: "GET",
+      headers: adminHeaders(),
+      queryStringParameters: { format },
+    });
+    const output = Buffer.from(response.body, "base64");
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.isBase64Encoded, true);
+    assert.equal(response.headers["Content-Type"], contentType);
+    assert.equal(output.subarray(0, signature.length).toString(), signature);
+  }
 });
 
 test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
   let rpcBody;
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
-    assert.equal(requestPath, "rpc/admin_update_guest_rsvp");
+    assert.equal(requestPath, "rpc/admin_update_guest");
     rpcBody = options.body;
     return { rsvpStatus: "not_attending" };
   });
@@ -419,6 +496,7 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
     headers: adminHeaders(),
     body: JSON.stringify({
       id: "guest-7",
+      name: "Guest Seven",
       status: "not_attending",
       mainId: "invalid-main",
       dessertId: "invalid-dessert",
@@ -429,6 +507,7 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
 
   assert.equal(response.statusCode, 200);
   assert.equal(rpcBody.p_status, "not_attending");
+  assert.equal(rpcBody.p_full_name, "Guest Seven");
   assert.equal(rpcBody.p_main_id, null);
   assert.equal(rpcBody.p_dessert_id, null);
   assert.equal(rpcBody.p_dietary_requirements, "");
@@ -444,13 +523,14 @@ test("admin rejects missing selections and database-invalid food IDs", async () 
   const missing = await handler({
     httpMethod: "PUT",
     headers: adminHeaders(),
-    body: JSON.stringify({ id: "guest-7", status: "attending" }),
+    body: JSON.stringify({ id: "guest-7", name: "Guest Seven", status: "attending" }),
   });
   const invalid = await handler({
     httpMethod: "PUT",
     headers: adminHeaders(),
     body: JSON.stringify({
       id: "guest-7",
+      name: "Guest Seven",
       status: "attending",
       mainId: "not-a-main",
       dessertId: "not-a-dessert",
@@ -461,6 +541,30 @@ test("admin rejects missing selections and database-invalid food IDs", async () 
   assert.equal(calls, 1);
   assert.equal(invalid.statusCode, 400);
   assert.match(jsonBody(invalid).error, /active main.*active dessert/i);
+});
+
+test("admin rejects invalid names and reports normalized-name conflicts safely", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    throw new SupabaseRequestError(409, "23505");
+  });
+
+  const invalid = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7", name: " ", status: "pending" }),
+  });
+  const duplicate = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7", name: "Existing Guest", status: "pending" }),
+  });
+
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(calls, 1);
+  assert.equal(duplicate.statusCode, 409);
+  assert.deepEqual(jsonBody(duplicate), { error: "Another guest already uses that name." });
 });
 
 test("admin migration reuses RSVP validation, clears pending food, and preserves RLS", () => {
@@ -476,6 +580,20 @@ test("admin migration reuses RSVP validation, clears pending food, and preserves
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
+test("admin name migration updates normalized lookup atomically and remains service-role-only", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "007_admin_edit_guest_name.sql"),
+    "utf8"
+  );
+  assert.match(sql, /cleaned_normalized_name := LOWER\(cleaned_full_name\)/i);
+  assert.match(sql, /normalized_name = cleaned_normalized_name/i);
+  assert.match(sql, /RETURN public\.admin_update_guest_rsvp/i);
+  assert.match(sql, /ERRCODE = '23505'/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
 test("admin frontend uses cookie sessions, name search, RSVP and role filters, and mobile layout", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "admin.html"), "utf8");
   const script = fs.readFileSync(path.join(__dirname, "..", "js", "admin.js"), "utf8");
@@ -485,14 +603,26 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /id="status-filter"/);
   assert.match(html, /id="role-filter"/);
   assert.match(html, /class="row-food-notes"/);
+  assert.match(html, /<input class="row-name"[^>]*required>/);
+  assert.match(html, /id="report-grand-total"/);
+  assert.match(html, /class="row-food-total"/);
+  assert.match(html, /class="guest-attire span-full"/);
+  assert.match(html, /class="row-attire-image"/);
   assert.match(script, /credentials: "same-origin"/);
+  assert.match(script, /nzd\.format\(summary\.cateringTotal/);
+  assert.match(script, /Unit price:.*item\.unitPrice.*Subtotal:.*item\.subtotal/);
   assert.match(script, /assertDownloadBlob\(blob, format\)/);
   assert.doesNotMatch(script, /adminPassword|Authorization:\s*`Bearer/i);
   assert.match(script, /guest\.name\.toLowerCase\(\)\.includes\(query\)/);
   assert.match(script, /guest\.status === status/);
   assert.match(script, /guest\.role === role/);
+  assert.match(script, /p_full_name|name: fullName/);
+  assert.match(script, /renderGuestAttire\(row, guest\)/);
+  assert.match(script, /Attire image unavailable/);
+  assert.match(script, /GUEST_ATTIRE_IMAGE = "\/images\/attire\/guest-attire-reference\.jpg"/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(css, /\.filter-grid/);
+  assert.match(css, /\.guest-attire/);
 });
 
 test("frontend keeps full names intact, blocks duplicate submits, and preserves music", () => {

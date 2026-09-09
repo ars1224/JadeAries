@@ -62,6 +62,7 @@
                     <article><span>Main selections</span><strong id="report-main-count">0</strong></article>
                     <article><span>Dessert selections</span><strong id="report-dessert-count">0</strong></article>
                     <article><span>Guests with dietary requirements</span><strong id="report-dietary-count">0</strong></article>
+                    <article><span>Combined catering total</span><strong id="report-grand-total">$0.00</strong></article>
                 </div>
                 <div id="catering-totals" class="food-report-groups"></div>
             </section>
@@ -102,7 +103,7 @@
                 </div>
             </header>
             <div class="guest-fields">
-                <div class="guest-readonly"><span>Full name</span><strong class="row-name"></strong></div>
+                <label>Full name<input class="row-name" maxlength="160" autocomplete="off" required></label>
                 <div class="guest-readonly"><span>Role</span><strong class="row-role"></strong></div>
                 <div class="guest-readonly"><span>Responded</span><time class="row-responded"></time></div>
                 <label>Status
@@ -122,8 +123,21 @@
                         <option value="">Not selected</option>
                     </select>
                 </label>
+                <label>Food total <small>(private)</small><output class="row-food-total">$0.00</output></label>
                 <label class="span-two">Dietary requirements<textarea class="row-dietary" rows="2" maxlength="1000"></textarea></label>
                 <label class="span-two">Food-selection notes<textarea class="row-food-notes" rows="2" maxlength="1000"></textarea></label>
+                <section class="guest-attire span-full" aria-label="Assigned attire">
+                    <div class="guest-attire-visual">
+                        <img class="row-attire-image" alt="" loading="lazy" hidden>
+                        <span class="row-attire-fallback">No attire image</span>
+                    </div>
+                    <div class="guest-attire-copy">
+                        <span>Assigned attire</span>
+                        <strong class="row-attire-name"></strong>
+                        <p class="row-attire-profile"></p>
+                        <p class="row-attire-description"></p>
+                    </div>
+                </section>
             </div>
         </article>
     </template>

@@ -3,7 +3,7 @@ const PDFDocument = require("pdfkit");
 const { isAdminAuthorized } = require("./lib/adminAuth");
 const { buildFoodReport } = require("./lib/foodReport");
 const { json, methodNotAllowed } = require("./lib/http");
-const { MENU_ITEMS } = require("./lib/menu");
+const { normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 const BRAND = {
@@ -376,21 +376,14 @@ function one(value) {
   return Array.isArray(value) ? (value[0] || null) : (value || null);
 }
 
-function normalizedMenuName(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
 function buildSupabaseFoodReport(guestRows, optionRows) {
-  const legacyPrices = new Map(
-    MENU_ITEMS.map((item) => [normalizedMenuName(item.name), Number(item.price || 0)])
-  );
   const menu = (Array.isArray(optionRows) ? optionRows : []).map((row) => ({
     slug: String(row.id),
     category: row.course,
     name: row.name,
     description: row.description || "",
-    dietaryCodes: row.dietary_restrictions || [],
-    price: legacyPrices.get(normalizedMenuName(row.name)) || 0,
+    dietaryCodes: normalizeDietaryCodes(row.dietary_restrictions),
+    price: privateMenuPrice(row.name),
   }));
   const guests = (Array.isArray(guestRows) ? guestRows : []).map((row) => {
     const choice = one(row.guest_food_choices);

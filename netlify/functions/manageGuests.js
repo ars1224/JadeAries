@@ -1,5 +1,6 @@
 const { isAdminAuthorized } = require("./lib/adminAuth");
 const { json, methodNotAllowed } = require("./lib/http");
+const { normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 const STATUSES = new Set(["pending", "attending", "not_attending"]);
@@ -27,12 +28,14 @@ function presentMenuItem(row) {
     category: row.course,
     name: row.name,
     description: row.description || "",
-    dietaryCodes: row.dietary_restrictions || [],
+    dietaryCodes: normalizeDietaryCodes(row.dietary_restrictions),
+    price: privateMenuPrice(row.name),
   };
 }
 
 function presentGuest(row) {
   const foodChoice = one(row.guest_food_choices);
+  const attire = one(row.attire_profiles);
   return {
     id: String(row.id),
     name: row.full_name,
@@ -43,6 +46,12 @@ function presentGuest(row) {
     foodNotes: foodChoice?.notes || "",
     dietaryRequirements: row.dietary_requirements || "",
     respondedAt: row.responded_at || null,
+    attire: attire ? {
+      displayName: attire.display_name || "",
+      attireName: attire.attire_name || "",
+      description: attire.attire_description || "",
+      imageUrl: attire.image_url || null,
+    } : null,
   };
 }
 
@@ -51,6 +60,8 @@ function buildDashboard(guests, menu) {
   const countChoice = (field, id) => guests.filter(
     (guest) => guest.status === "attending" && guest[field] === id
   ).length;
+  const prices = new Map(menu.map((item) => [item.id, Number(item.price || 0)]));
+  const attendingGuests = guests.filter((guest) => guest.status === "attending");
 
   return {
     summary: {
@@ -68,14 +79,38 @@ function buildDashboard(guests, menu) {
         (guest) => guest.status === "attending" && guest.mainId && guest.dessertId
       ).length,
       dietaryRequirements: guests.filter((guest) => guest.dietaryRequirements).length,
+      cateringTotal: attendingGuests.reduce(
+        (total, guest) => total
+          + (prices.get(guest.mainId) || 0)
+          + (prices.get(guest.dessertId) || 0),
+        0
+      ),
     },
     catering: {
       mains: menu
         .filter((item) => item.category === "main")
-        .map((item) => ({ id: item.id, name: item.name, count: countChoice("mainId", item.id) })),
+        .map((item) => {
+          const count = countChoice("mainId", item.id);
+          return {
+            id: item.id,
+            name: item.name,
+            count,
+            unitPrice: Number(item.price || 0),
+            subtotal: count * Number(item.price || 0),
+          };
+        }),
       desserts: menu
         .filter((item) => item.category === "dessert")
-        .map((item) => ({ id: item.id, name: item.name, count: countChoice("dessertId", item.id) })),
+        .map((item) => {
+          const count = countChoice("dessertId", item.id);
+          return {
+            id: item.id,
+            name: item.name,
+            count,
+            unitPrice: Number(item.price || 0),
+            subtotal: count * Number(item.price || 0),
+          };
+        }),
     },
   };
 }
@@ -88,6 +123,7 @@ async function loadDashboard() {
     "rsvp_status",
     "responded_at",
     "dietary_requirements",
+    "attire_profiles(display_name,attire_name,attire_description,image_url)",
     "guest_food_choices(main_id,dessert_id,notes)",
   ].join(",");
   const menuSelect = "id,course,name,description,dietary_restrictions,sort_order";
@@ -114,11 +150,25 @@ function adminError(error) {
   });
 
   if (error?.code === "22023") {
-    return json(400, { error: "Choose one active main and one active dessert for an attending guest." });
+    return json(400, {
+      error: "Choose one active main and one active dessert for an attending guest.",
+    });
   }
+
+  if (error?.code === "22001") {
+    return json(400, { error: "Guest name must be between 2 and 160 characters." });
+  }
+
+  if (error?.code === "23505") {
+    return json(409, { error: "Another guest already uses that name." });
+  }
+
   if (error?.code === "P0002") {
-    return json(404, { error: "Guest not found." });
+    return json(404, {
+      error: "Guest not found.",
+    });
   }
+
   return json(500, { error: "The guest list could not be updated right now." });
 }
 
@@ -147,6 +197,7 @@ exports.handler = async (event) => {
   }
 
   const guestId = requiredId(body.id);
+  const fullName = String(body.name || "").trim().replace(/\s+/g, " ");
   const status = String(body.status || "").trim().toLowerCase();
   const mainId = requiredId(body.mainId);
   const dessertId = requiredId(body.dessertId);
@@ -163,6 +214,9 @@ exports.handler = async (event) => {
   if (!guestId) {
     return json(400, { error: "A valid guest ID is required." });
   }
+  if (fullName.length < 2 || fullName.length > 160) {
+    return json(400, { error: "Guest name must be between 2 and 160 characters." });
+  }
   if (!STATUSES.has(status)) {
     return json(400, { error: "Choose a valid RSVP status." });
   }
@@ -171,10 +225,11 @@ exports.handler = async (event) => {
   }
 
   try {
-    await supabase.request("rpc/admin_update_guest_rsvp", {
+    await supabase.request("rpc/admin_update_guest", {
       method: "POST",
       body: {
         p_guest_id: guestId,
+        p_full_name: fullName,
         p_status: status,
         p_main_id: status === "attending" ? mainId : null,
         p_dessert_id: status === "attending" ? dessertId : null,

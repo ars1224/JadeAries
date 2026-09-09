@@ -16,6 +16,8 @@ The existing Supabase tables and data remain in place. Run these migrations in o
 
 `database/migrations/006_supabase_admin_rsvp.sql`
 
+`database/migrations/007_admin_edit_guest_name.sql`
+
 Migration `004` adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
 
 The older `database/schema.sql` and migrations `001`–`003` belong to an abandoned direct-PostgreSQL prototype in this working tree. Do not run or import them into the prepared `aries-jade-wedding` Supabase project.
@@ -23,6 +25,8 @@ The older `database/schema.sql` and migrations `001`–`003` belong to an abando
 Migration `005` maps all approved attire and menu photos to root-relative `/images/attire/` and `/images/food/` paths served by Netlify.
 
 Migration `006` adds a service-role-only admin RSVP wrapper. It reuses the public RSVP transaction for attending and not-attending updates and adds an atomic pending reset that removes any saved food choice. It does not disable RLS or grant browser roles access.
+
+Migration `007` adds the service-role-only admin rename operation. It updates `full_name` and the normalized lookup value in the same transaction as the existing admin RSVP update, rejects duplicate normalized names, and accommodates either a stored or generated `normalized_name` column.
 
 ## Netlify environment variables
 

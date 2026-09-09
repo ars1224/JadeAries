@@ -1,6 +1,7 @@
 const API_URL = "/.netlify/functions/manageGuests";
 const AUTH_URL = "/.netlify/functions/admin-auth";
 const FOOD_REPORT_URL = "/.netlify/functions/exportFoodReport";
+const GUEST_ATTIRE_IMAGE = "/images/attire/guest-attire-reference.jpg";
 
 const loginView = document.getElementById("login-view");
 const managerView = document.getElementById("manager-view");
@@ -21,6 +22,11 @@ const downloadFoodExcel = document.getElementById("download-food-excel");
 
 let guests = [];
 let menuItems = [];
+
+const nzd = new Intl.NumberFormat("en-NZ", {
+    style: "currency",
+    currency: "NZD"
+});
 
 function titleCase(value) {
     return String(value || "")
@@ -100,6 +106,7 @@ function renderSummary(summary = {}) {
     document.getElementById("report-main-count").textContent = String(summary.mainSelections || 0);
     document.getElementById("report-dessert-count").textContent = String(summary.dessertSelections || 0);
     document.getElementById("report-dietary-count").textContent = String(summary.dietaryRequirements || 0);
+    document.getElementById("report-grand-total").textContent = nzd.format(summary.cateringTotal || 0);
 }
 
 function renderCateringGroup(title, items) {
@@ -118,12 +125,17 @@ function renderCateringGroup(title, items) {
     items.forEach((item) => {
         const card = document.createElement("article");
         card.className = "food-report-card catering-count-card";
+        const details = document.createElement("div");
         const name = document.createElement("h4");
         name.textContent = item.name;
+        const price = document.createElement("p");
+        price.className = "catering-price";
+        price.textContent = `Unit price: ${nzd.format(item.unitPrice || 0)} · Subtotal: ${nzd.format(item.subtotal || 0)}`;
+        details.append(name, price);
         const count = document.createElement("strong");
         count.textContent = String(item.count);
         count.setAttribute("aria-label", `${item.count} selections`);
-        card.append(name, count);
+        card.append(details, count);
         grid.append(card);
     });
 
@@ -151,6 +163,16 @@ function menuName(id) {
     return menuItems.find((item) => item.id === String(id))?.name || "";
 }
 
+function foodPrice(id) {
+    return Number(menuItems.find((item) => item.id === String(id))?.price || 0);
+}
+
+function updateFoodTotal(mainInput, dessertInput, totalOutput) {
+    const value = foodPrice(mainInput.value) + foodPrice(dessertInput.value);
+    totalOutput.value = nzd.format(value);
+    totalOutput.textContent = totalOutput.value;
+}
+
 function populateFoodSelect(select, category, selectedValue) {
     select.replaceChildren(new Option("Not selected", ""));
     menuItems
@@ -158,7 +180,7 @@ function populateFoodSelect(select, category, selectedValue) {
         .forEach((item) => {
             const dietaryCodes = normalizeDietaryCodes(item.dietaryCodes);
             const dietary = dietaryCodes.length ? ` · ${dietaryCodes.join("/")}` : "";
-            select.append(new Option(`${item.name}${dietary}`, item.id));
+            select.append(new Option(`${item.name}${dietary} — ${nzd.format(item.price || 0)}`, item.id));
         });
     select.value = selectedValue || "";
 }
@@ -176,7 +198,7 @@ function normalizeDietaryCodes(value) {
   return [];
 }
 
-function syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput) {
+function syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput) {
     const attending = statusInput.value === "attending";
     const notAttending = statusInput.value === "not_attending";
     mainInput.disabled = !attending;
@@ -193,6 +215,7 @@ function syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietar
     if (notAttending) {
         dietaryInput.value = "";
     }
+    updateFoodTotal(mainInput, dessertInput, totalOutput);
 }
 
 function formattedResponseTime(value) {
@@ -204,6 +227,42 @@ function formattedResponseTime(value) {
         timeStyle: "short",
         timeZone: "Pacific/Auckland"
     }).format(new Date(value));
+}
+
+function renderGuestAttire(row, guest) {
+    const attire = guest.attire;
+    const isGuestRole = String(guest.role || "").trim().toLowerCase() === "guest";
+    const imageUrl = attire?.imageUrl || (isGuestRole ? GUEST_ATTIRE_IMAGE : "");
+    const image = row.querySelector(".row-attire-image");
+    const fallback = row.querySelector(".row-attire-fallback");
+    const attireName = attire?.attireName || attire?.displayName
+        || (isGuestRole ? "Guest attire" : "No attire assigned");
+    const profileName = attire?.displayName && attire.displayName !== attireName
+        ? attire.displayName
+        : "";
+
+    row.querySelector(".row-attire-name").textContent = attireName;
+    row.querySelector(".row-attire-profile").textContent = profileName;
+    row.querySelector(".row-attire-profile").hidden = !profileName;
+    row.querySelector(".row-attire-description").textContent = attire?.description
+        || "Please contact the bride or groom for this guest's attire details.";
+
+    if (!imageUrl) {
+        image.hidden = true;
+        fallback.hidden = false;
+        fallback.textContent = attire ? "No attire image" : "No attire assigned";
+        return;
+    }
+
+    fallback.hidden = true;
+    image.hidden = false;
+    image.src = imageUrl;
+    image.alt = `${attireName} reference for ${guest.name}`;
+    image.addEventListener("error", () => {
+        image.hidden = true;
+        fallback.hidden = false;
+        fallback.textContent = "Attire image unavailable";
+    }, { once: true });
 }
 
 function renderGuests() {
@@ -226,6 +285,8 @@ function renderGuests() {
         const dessertInput = row.querySelector(".row-dessert");
         const dietaryInput = row.querySelector(".row-dietary");
         const notesInput = row.querySelector(".row-food-notes");
+        const totalOutput = row.querySelector(".row-food-total");
+        const nameInput = row.querySelector(".row-name");
         const saveButton = row.querySelector(".save-row");
 
         row.querySelector(".guest-heading").textContent = guest.name;
@@ -235,7 +296,7 @@ function renderGuests() {
             guest.mainId ? menuName(guest.mainId) : "No main",
             guest.dessertId ? menuName(guest.dessertId) : "No dessert"
         ].join(" · ");
-        row.querySelector(".row-name").textContent = guest.name;
+        nameInput.value = guest.name;
         row.querySelector(".row-role").textContent = guest.role;
         const respondedTime = row.querySelector(".row-responded");
         respondedTime.textContent = formattedResponseTime(guest.respondedAt);
@@ -244,25 +305,33 @@ function renderGuests() {
         } else {
             respondedTime.removeAttribute("datetime");
         }
+        renderGuestAttire(row, guest);
 
         statusInput.value = guest.status;
         populateFoodSelect(mainInput, "main", guest.mainId);
         populateFoodSelect(dessertInput, "dessert", guest.dessertId);
         dietaryInput.value = guest.dietaryRequirements;
         notesInput.value = guest.foodNotes;
-        syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput);
+        syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput);
 
         statusInput.addEventListener("change", () => {
-            syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput);
+            syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput);
         });
+        mainInput.addEventListener("change", () => updateFoodTotal(mainInput, dessertInput, totalOutput));
+        dessertInput.addEventListener("change", () => updateFoodTotal(mainInput, dessertInput, totalOutput));
 
         saveButton.addEventListener("click", async () => {
             try {
                 hideMessage();
+                const fullName = nameInput.value.trim().replace(/\s+/g, " ");
+                if (fullName.length < 2 || fullName.length > 160) {
+                    throw new Error("Guest name must be between 2 and 160 characters.");
+                }
                 saveButton.disabled = true;
                 saveButton.textContent = "Saving…";
                 await apiRequest("PUT", {
                     id: guest.id,
+                    name: fullName,
                     status: statusInput.value,
                     mainId: mainInput.value || null,
                     dessertId: dessertInput.value || null,
