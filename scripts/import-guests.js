@@ -52,7 +52,15 @@ const ATTIRE_BY_ROLE = {
     title: "Ninong attire",
     description: "Navy two-piece suit, white shirt, matching navy tie, and brown shoes."
   },
+  "Proxy Ninong": {
+    title: "Ninong attire",
+    description: "Navy two-piece suit, white shirt, matching navy tie, and brown shoes."
+  },
   Ninang: {
+    title: "Ninang attire",
+    description: "Dusty pink floor-length gown with off-the-shoulder sleeves."
+  },
+  "Proxy Ninang": {
     title: "Ninang attire",
     description: "Dusty pink floor-length gown with off-the-shoulder sleeves."
   },

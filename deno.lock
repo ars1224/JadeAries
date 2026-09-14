@@ -11,6 +11,8 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:exceljs@^4.4.0",
+        "npm:pdfkit@~0.20.2",
         "npm:pg@^8.23.0"
       ]
     }

@@ -44,6 +44,25 @@
                 <article class="stat-card stat-meals"><span>Meal selections</span><strong id="stat-meals">0</strong></article>
             </div>
 
+            <section class="panel add-panel">
+                <div>
+                    <p class="eyebrow">Guest list</p>
+                    <h2>Add invitee</h2>
+                    <p>New invitees start with a pending RSVP. Their attire is assigned automatically from the selected role.</p>
+                </div>
+                <form id="add-guest-form" class="form-grid">
+                    <label>Full name
+                        <input id="add-guest-name" maxlength="160" autocomplete="off" placeholder="Invitee’s full name" required>
+                    </label>
+                    <label>Role
+                        <select id="add-guest-role"></select>
+                        <span id="add-attire-preview" class="field-hint"></span>
+                    </label>
+                    <button id="add-guest-button" class="span-two" type="submit">Add invitee</button>
+                    <p id="add-guest-message" class="message span-two" role="status" hidden></p>
+                </form>
+            </section>
+
             <section class="panel food-report-panel">
                 <div class="toolbar">
                     <div>
@@ -100,11 +119,14 @@
                 <div><strong class="guest-heading"></strong><span class="guest-meta"></span></div>
                 <div class="row-actions">
                     <button class="save-row" type="button">Save</button>
+                    <button class="delete-row button-danger" type="button">Delete</button>
                 </div>
             </header>
             <div class="guest-fields">
                 <label>Full name<input class="row-name" maxlength="160" autocomplete="off" required></label>
-                <div class="guest-readonly"><span>Role</span><strong class="row-role"></strong></div>
+                <label>Role
+                    <select class="row-role"></select>
+                </label>
                 <div class="guest-readonly"><span>Responded</span><time class="row-responded"></time></div>
                 <label>Status
                     <select class="row-status">

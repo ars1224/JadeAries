@@ -4,7 +4,7 @@
 BEGIN;
 
 UPDATE public.attire_profiles
-   SET image_url = '/images/attire/guest-attire-reference.jpg'
+   SET image_url = '/images/attire/guest-attire-reference.png'
  WHERE LOWER(BTRIM(display_name)) IN ('guest', 'wedding guest')
     OR LOWER(BTRIM(attire_name)) = 'wedding guest attire';
 

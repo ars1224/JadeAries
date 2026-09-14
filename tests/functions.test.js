@@ -276,7 +276,48 @@ test("guest attire correction targets the production Wedding Guest profile", () 
   );
   assert.match(sql, /'wedding guest'/i);
   assert.match(sql, /'wedding guest attire'/i);
-  assert.match(sql, /'\/images\/attire\/guest-attire-reference\.jpg'/i);
+  assert.match(sql, /'\/images\/attire\/guest-attire-reference\.png'/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("proxy sponsor migration maps proxy roles to sponsor attire", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "009_proxy_sponsor_roles.sql"),
+    "utf8"
+  );
+  assert.match(sql, /p_role TEXT DEFAULT NULL/i);
+  assert.match(sql, /WHEN 'proxy ninong' THEN 'ninong'/i);
+  assert.match(sql, /WHEN 'proxy ninang' THEN 'ninang'/i);
+  assert.match(sql, /role = cleaned_role/i);
+  assert.match(sql, /attire_profile_id = COALESCE\(selected_attire_profile_id, attire_profile_id\)/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("admin delete migration removes guest food choices before deleting the guest", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "010_admin_delete_guest.sql"),
+    "utf8"
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.admin_delete_guest/i);
+  assert.match(sql, /DELETE FROM public\.guest_food_choices[\s\S]*DELETE FROM public\.guests/i);
+  assert.match(sql, /ERRCODE = 'P0002'/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("role-change migration maps common role labels to attire profiles", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "011_sync_attire_when_role_changes.sql"),
+    "utf8"
+  );
+  assert.match(sql, /WHEN 'proxy ninong' THEN ARRAY\['ninong'\]/i);
+  assert.match(sql, /WHEN 'proxy ninang' THEN ARRAY\['ninang'\]/i);
+  assert.match(sql, /WHEN 'groomsmen' THEN ARRAY\['groomsman', 'groomsmen'\]/i);
+  assert.match(sql, /WHEN 'guest' THEN ARRAY\['guest', 'wedding guest'\]/i);
+  assert.match(sql, /attire_profile_id = COALESCE\(selected_attire_profile_id, attire_profile_id\)/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
@@ -337,7 +378,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
         display_name: "Guest attire",
         attire_name: "Whimsical Pastel Semi-formal",
         attire_description: "Wear a whimsical pastel shade.",
-        image_url: "/images/attire/guest-attire-reference.jpg",
+        image_url: "/images/attire/guest-attire-reference.png",
       } : null,
       guest_food_choices: attending ? [{
         main_id: index < 12 ? "main-beef" : "main-salmon",
@@ -392,7 +433,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
     displayName: "Guest attire",
     attireName: "Whimsical Pastel Semi-formal",
     description: "Wear a whimsical pastel shade.",
-    imageUrl: "/images/attire/guest-attire-reference.jpg",
+    imageUrl: "/images/attire/guest-attire-reference.png",
   });
   assert.doesNotMatch(response.body, /SUPABASE|service-role|legacy_id|ADMIN_PASSWORD/i);
 });
@@ -508,6 +549,7 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
     body: JSON.stringify({
       id: "guest-7",
       name: "Guest Seven",
+      role: "Proxy Ninong",
       status: "not_attending",
       mainId: "invalid-main",
       dessertId: "invalid-dessert",
@@ -519,10 +561,164 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
   assert.equal(response.statusCode, 200);
   assert.equal(rpcBody.p_status, "not_attending");
   assert.equal(rpcBody.p_full_name, "Guest Seven");
+  assert.equal(rpcBody.p_role, "Proxy Ninong");
   assert.equal(rpcBody.p_main_id, null);
   assert.equal(rpcBody.p_dessert_id, null);
   assert.equal(rpcBody.p_dietary_requirements, "");
   assert.equal(rpcBody.p_notes, "");
+});
+
+test("admin can add a pending invitee with role-matched attire", async () => {
+  const calls = [];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    calls.push({ requestPath, options });
+    if (requestPath.includes("normalized_name=eq.new%20invitee")) return [];
+    if (requestPath.startsWith("attire_profiles?")) {
+      return [{ id: "attire-ninang", display_name: "Ninang" }];
+    }
+    if (requestPath === "guests?select=id,normalized_name") {
+      return [{ id: "guest-new", normalized_name: "new invitee" }];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ name: "  New   Invitee ", role: "Proxy Ninang" }),
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(jsonBody(response), { success: true, id: "guest-new" });
+  assert.equal(calls.length, 3);
+  assert.equal(calls[2].options.method, "POST");
+  assert.equal(calls[2].options.body.full_name, "New Invitee");
+  assert.equal(calls[2].options.body.role, "Proxy Ninang");
+  assert.equal(calls[2].options.body.rsvp_status, "pending");
+  assert.equal(calls[2].options.body.attire_profile_id, "attire-ninang");
+});
+
+test("admin add invitee rejects duplicate normalized names", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    return [{ id: "existing-guest" }];
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ name: "Existing Guest", role: "Guest" }),
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(calls, 1);
+  assert.deepEqual(jsonBody(response), { error: "Another guest already uses that name." });
+});
+
+test("admin updates remain compatible before the role-aware RPC migration is installed", async () => {
+  const calls = [];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
+    calls.push({ requestPath, options });
+    if (calls.length === 1) {
+      const error = new Error("RPC signature is missing");
+      error.code = "PGRST202";
+      throw error;
+    }
+    if (requestPath.startsWith("attire_profiles?")) {
+      return [
+        { id: "attire-ninong", display_name: "Ninong" },
+        { id: "attire-guest", display_name: "Wedding Guest" },
+      ];
+    }
+    if (requestPath.startsWith("guests?")) {
+      return [{ id: "guest-7" }];
+    }
+    return { success: true };
+  });
+  const response = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      name: "Guest Seven",
+      role: "Proxy Ninong",
+      status: "pending",
+    }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 4);
+  assert.equal(calls[0].requestPath, "rpc/admin_update_guest");
+  assert.equal(calls[0].options.body.p_role, "Proxy Ninong");
+  assert.equal(calls[1].requestPath, "rpc/admin_update_guest");
+  assert.equal("p_role" in calls[1].options.body, false);
+  assert.match(calls[2].requestPath, /^attire_profiles\?/);
+  assert.match(calls[3].requestPath, /^guests\?id=eq\.guest-7/);
+  assert.equal(calls[3].options.method, "PATCH");
+  assert.equal(calls[3].options.body.role, "Proxy Ninong");
+  assert.equal(calls[3].options.body.attire_profile_id, "attire-ninong");
+});
+
+test("admin delete requests use the service-role-only delete RPC", async () => {
+  let rpcBody;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
+    assert.equal(requestPath, "rpc/admin_delete_guest");
+    rpcBody = options.body;
+    return { fullName: "Guest Seven", role: "Guest" };
+  });
+  const response = await handler({
+    httpMethod: "DELETE",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7" }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(jsonBody(response), { success: true });
+  assert.equal(rpcBody.p_guest_id, "guest-7");
+});
+
+test("admin delete remains compatible before the delete RPC migration is installed", async () => {
+  const calls = [];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
+    calls.push({ requestPath, options });
+    if (requestPath === "rpc/admin_delete_guest") {
+      const error = new Error("RPC is missing");
+      error.code = "PGRST202";
+      throw error;
+    }
+    if (requestPath.startsWith("guests?")) {
+      return [{ id: "guest-7" }];
+    }
+    return [];
+  });
+  const response = await handler({
+    httpMethod: "DELETE",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7" }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].requestPath, "rpc/admin_delete_guest");
+  assert.match(calls[1].requestPath, /^guest_food_choices\?guest_id=eq\.guest-7$/);
+  assert.equal(calls[1].options.method, "DELETE");
+  assert.match(calls[2].requestPath, /^guests\?id=eq\.guest-7/);
+  assert.equal(calls[2].options.headers.Prefer, "return=representation");
+});
+
+test("admin delete rejects missing ids before calling Supabase", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    return {};
+  });
+  const response = await handler({
+    httpMethod: "DELETE",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "" }),
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(calls, 0);
 });
 
 test("admin rejects missing selections and database-invalid food IDs", async () => {
@@ -619,7 +815,22 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /class="row-food-total"/);
   assert.match(html, /class="guest-attire span-full"/);
   assert.match(html, /class="row-attire-image"/);
+  assert.match(html, /class="delete-row button-danger"/);
+  assert.match(html, /<select class="row-role"><\/select>/);
+  assert.match(html, /id="add-guest-form"/);
+  assert.match(html, /id="add-guest-name"/);
+  assert.match(html, /id="add-guest-role"/);
+  assert.match(html, />Add invitee<\/button>/);
   assert.match(script, /credentials: "same-origin"/);
+  assert.match(script, /"Proxy Ninong"/);
+  assert.match(script, /"Proxy Ninang"/);
+  assert.match(script, /ATTIRE_BY_ROLE/);
+  assert.match(script, /roleInput\.addEventListener\("change"/);
+  assert.match(script, /attireForRole\(roleInput\.value, guest\.attire\)/);
+  assert.match(script, /window\.confirm/);
+  assert.match(script, /apiRequest\("DELETE", \{ id: guest\.id \}\)/);
+  assert.match(script, /apiRequest\("POST", \{/);
+  assert.match(script, /addGuestRole\.addEventListener\("change", updateAddAttirePreview\)/);
   assert.match(script, /nzd\.format\(summary\.cateringTotal/);
   assert.match(script, /Unit price:.*item\.unitPrice.*Subtotal:.*item\.subtotal/);
   assert.match(script, /assertDownloadBlob\(blob, format\)/);
@@ -627,10 +838,11 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(script, /guest\.name\.toLowerCase\(\)\.includes\(query\)/);
   assert.match(script, /guest\.status === status/);
   assert.match(script, /guest\.role === role/);
+  assert.match(script, /p_role|role: roleInput\.value/);
   assert.match(script, /p_full_name|name: fullName/);
   assert.match(script, /renderGuestAttire\(row, guest\)/);
   assert.match(script, /Attire image unavailable/);
-  assert.match(script, /GUEST_ATTIRE_IMAGE = "\/images\/attire\/guest-attire-reference\.jpg"/);
+  assert.match(script, /GUEST_ATTIRE_IMAGE = "\/images\/attire\/guest-attire-reference\.png"/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(css, /\.filter-grid/);
   assert.match(css, /\.guest-attire/);

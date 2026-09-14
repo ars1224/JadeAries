@@ -21,7 +21,7 @@ WITH attire_image_map (display_name, image_url) AS (
         ('Ring Bearer', '/images/attire/bearers-suit-reference.jpg'),
         ('Coin Bearer', '/images/attire/bearers-suit-reference.jpg'),
         ('Bible Bearer', '/images/attire/bearers-suit-reference.jpg'),
-        ('Guest', '/images/attire/guest-attire-reference.jpg'),
+        ('Guest', '/images/attire/guest-attire-reference.png'),
         ('Officiant', '/images/attire/officiant-attire-reference.png')
 )
 UPDATE public.attire_profiles AS profile

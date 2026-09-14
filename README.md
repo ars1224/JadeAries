@@ -20,6 +20,12 @@ The existing Supabase tables and data remain in place. Run these migrations in o
 
 `database/migrations/008_fix_wedding_guest_attire_image.sql`
 
+`database/migrations/009_proxy_sponsor_roles.sql`
+
+`database/migrations/010_admin_delete_guest.sql`
+
+`database/migrations/011_sync_attire_when_role_changes.sql`
+
 Migration `004` adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
 
 The older `database/schema.sql` and migrations `001`–`003` belong to an abandoned direct-PostgreSQL prototype in this working tree. Do not run or import them into the prepared `aries-jade-wedding` Supabase project.
@@ -30,7 +36,13 @@ Migration `006` adds a service-role-only admin RSVP wrapper. It reuses the publi
 
 Migration `007` adds the service-role-only admin rename operation. It updates `full_name` and the normalized lookup value in the same transaction as the existing admin RSVP update, rejects duplicate normalized names, and accommodates either a stored or generated `normalized_name` column.
 
-Migration `008` corrects the production attire-profile label mismatch by mapping both `Guest` and `Wedding Guest` to the existing approved `/images/attire/guest-attire-reference.jpg` asset.
+Migration `008` corrects the production attire-profile label mismatch by mapping both `Guest` and `Wedding Guest` to the existing approved `/images/attire/guest-attire-reference.png` asset.
+
+Migration `009` lets the admin dashboard assign `Proxy Ninong` and `Proxy Ninang` roles. Those guests keep the proxy role label while receiving the matching Ninong or Ninang attire profile.
+
+Migration `010` adds a service-role-only admin delete operation. The private dashboard uses it to remove a guest and any saved food choice together.
+
+Migration `011` keeps the assigned attire profile in sync when the private dashboard changes a guest's role, including proxy sponsors and production label mismatches.
 
 ## Netlify environment variables
 

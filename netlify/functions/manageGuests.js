@@ -4,6 +4,22 @@ const { normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 const STATUSES = new Set(["pending", "attending", "not_attending"]);
+const MISSING_RPC_CODES = new Set(["PGRST202", "PGRST204"]);
+
+const ATTIRE_PROFILE_NAMES_BY_ROLE = {
+  "proxy ninong": ["ninong"],
+  "proxy ninang": ["ninang"],
+  groomsmen: ["groomsman", "groomsmen"],
+  "guest - officiant": ["officiant"],
+  guest: ["guest", "wedding guest"],
+  parents: [
+    "parents",
+    "father of the bride",
+    "mother of the bride",
+    "father of the groom",
+    "mother of the groom",
+  ],
+};
 
 function one(value) {
   return Array.isArray(value) ? (value[0] || null) : (value || null);
@@ -20,6 +36,134 @@ function optionalText(value, maximum) {
 function requiredId(value) {
   const id = String(value || "").trim();
   return id && id.length <= 128 ? id : "";
+}
+
+function normalizeRole(value) {
+  return String(value || "Guest").trim().replace(/\s+/g, " ");
+}
+
+function normalized(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isMissingRpc(error) {
+  return MISSING_RPC_CODES.has(error?.code);
+}
+
+function notFoundError() {
+  const error = new Error("Guest not found.");
+  error.code = "P0002";
+  return error;
+}
+
+function duplicateNameError() {
+  const error = new Error("Another guest already uses that name.");
+  error.code = "23505";
+  return error;
+}
+
+async function findAttireProfileId(role) {
+  const profiles = await supabase.request(
+    `attire_profiles?select=${encodeURIComponent("id,display_name")}&limit=500`
+  );
+  const candidates = ATTIRE_PROFILE_NAMES_BY_ROLE[normalized(role)] || [normalized(role)];
+  const profilesByName = new Map(
+    (Array.isArray(profiles) ? profiles : []).map((profile) => [
+      normalized(profile.display_name),
+      profile.id,
+    ])
+  );
+
+  for (const candidate of candidates) {
+    if (profilesByName.has(candidate)) {
+      return profilesByName.get(candidate);
+    }
+  }
+  return null;
+}
+
+async function updateGuestRole(guestId, role) {
+  const attireProfileId = await findAttireProfileId(role);
+  const changes = {
+    role,
+    updated_at: new Date().toISOString(),
+  };
+  if (attireProfileId !== null) {
+    changes.attire_profile_id = attireProfileId;
+  }
+
+  const updated = await supabase.request(
+    `guests?id=eq.${encodeURIComponent(guestId)}&select=id`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: changes,
+    }
+  );
+  if (!Array.isArray(updated) || updated.length === 0) {
+    throw notFoundError();
+  }
+}
+
+async function createGuest(fullName, role) {
+  const normalizedName = normalized(fullName);
+  const existing = await supabase.request(
+    `guests?select=id&normalized_name=eq.${encodeURIComponent(normalizedName)}&limit=1`
+  );
+  if (Array.isArray(existing) && existing.length > 0) {
+    throw duplicateNameError();
+  }
+
+  const attireProfileId = await findAttireProfileId(role);
+  const newGuest = {
+    full_name: fullName,
+    role,
+    rsvp_status: "pending",
+  };
+  if (attireProfileId !== null) {
+    newGuest.attire_profile_id = attireProfileId;
+  }
+
+  const inserted = await supabase.request(
+    "guests?select=id,normalized_name",
+    {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: newGuest,
+    }
+  );
+  const guest = Array.isArray(inserted) ? inserted[0] : null;
+  if (!guest?.id) {
+    throw new Error("The new guest could not be created.");
+  }
+
+  if (!guest.normalized_name) {
+    await supabase.request(
+      `guests?id=eq.${encodeURIComponent(guest.id)}`,
+      {
+        method: "PATCH",
+        body: { normalized_name: normalizedName },
+      }
+    );
+  }
+  return guest.id;
+}
+
+async function deleteGuestWithoutRpc(guestId) {
+  await supabase.request(
+    `guest_food_choices?guest_id=eq.${encodeURIComponent(guestId)}`,
+    { method: "DELETE" }
+  );
+  const removed = await supabase.request(
+    `guests?id=eq.${encodeURIComponent(guestId)}&select=id`,
+    {
+      method: "DELETE",
+      headers: { Prefer: "return=representation" },
+    }
+  );
+  if (!Array.isArray(removed) || removed.length === 0) {
+    throw notFoundError();
+  }
 }
 
 function presentMenuItem(row) {
@@ -185,8 +329,8 @@ exports.handler = async (event) => {
     }
   }
 
-  if (event.httpMethod !== "PUT") {
-    return methodNotAllowed("GET, PUT");
+  if (!["POST", "PUT", "DELETE"].includes(event.httpMethod)) {
+    return methodNotAllowed("GET, POST, PUT, DELETE");
   }
 
   let body;
@@ -198,6 +342,7 @@ exports.handler = async (event) => {
 
   const guestId = requiredId(body.id);
   const fullName = String(body.name || "").trim().replace(/\s+/g, " ");
+  const role = normalizeRole(body.role);
   const status = String(body.status || "").trim().toLowerCase();
   const mainId = requiredId(body.mainId);
   const dessertId = requiredId(body.dessertId);
@@ -211,11 +356,48 @@ exports.handler = async (event) => {
     return json(400, { error: "Dietary requirements and food notes must each be 1,000 characters or fewer." });
   }
 
+  if (event.httpMethod === "POST") {
+    if (fullName.length < 2 || fullName.length > 160) {
+      return json(400, { error: "Guest name must be between 2 and 160 characters." });
+    }
+    if (role.length < 2 || role.length > 80) {
+      return json(400, { error: "Choose a valid guest role." });
+    }
+
+    try {
+      const id = await createGuest(fullName, role);
+      return json(201, { success: true, id: String(id) });
+    } catch (error) {
+      return adminError(error);
+    }
+  }
+
   if (!guestId) {
     return json(400, { error: "A valid guest ID is required." });
   }
+
+  if (event.httpMethod === "DELETE") {
+    try {
+      try {
+        await supabase.request("rpc/admin_delete_guest", {
+          method: "POST",
+          body: { p_guest_id: guestId },
+        });
+      } catch (error) {
+        if (!isMissingRpc(error)) throw error;
+        await deleteGuestWithoutRpc(guestId);
+      }
+      return json(200, { success: true });
+    } catch (error) {
+      return adminError(error);
+    }
+  }
+
   if (fullName.length < 2 || fullName.length > 160) {
     return json(400, { error: "Guest name must be between 2 and 160 characters." });
+  }
+  if (role.length < 2 || role.length > 80) {
+    return json(400, { error: "Choose a valid guest role." });
   }
   if (!STATUSES.has(status)) {
     return json(400, { error: "Choose a valid RSVP status." });
@@ -225,18 +407,31 @@ exports.handler = async (event) => {
   }
 
   try {
-    await supabase.request("rpc/admin_update_guest", {
-      method: "POST",
-      body: {
-        p_guest_id: guestId,
-        p_full_name: fullName,
-        p_status: status,
-        p_main_id: status === "attending" ? mainId : null,
-        p_dessert_id: status === "attending" ? dessertId : null,
-        p_dietary_requirements: status === "not_attending" ? "" : dietaryRequirements,
-        p_notes: status === "attending" ? foodNotes : "",
-      },
-    });
+    const updateBody = {
+      p_guest_id: guestId,
+      p_full_name: fullName,
+      p_role: role,
+      p_status: status,
+      p_main_id: status === "attending" ? mainId : null,
+      p_dessert_id: status === "attending" ? dessertId : null,
+      p_dietary_requirements: status === "not_attending" ? "" : dietaryRequirements,
+      p_notes: status === "attending" ? foodNotes : "",
+    };
+
+    try {
+      await supabase.request("rpc/admin_update_guest", {
+        method: "POST",
+        body: updateBody,
+      });
+    } catch (error) {
+      if (!isMissingRpc(error)) throw error;
+      const { p_role: unusedRole, ...legacyUpdateBody } = updateBody;
+      await supabase.request("rpc/admin_update_guest", {
+        method: "POST",
+        body: legacyUpdateBody,
+      });
+      await updateGuestRole(guestId, role);
+    }
     return json(200, { success: true });
   } catch (error) {
     return adminError(error);

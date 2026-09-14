@@ -435,6 +435,25 @@ button,
     line-height: 1.5;
 }
 
+.add-panel h2 {
+    margin-bottom: 12px;
+}
+
+.add-panel .message {
+    margin: 0;
+}
+
+.field-hint {
+    color: var(--muted);
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.4;
+    margin-top: 8px;
+    text-transform: none;
+}
+
 .form-grid,
 .guest-fields {
     display: grid;

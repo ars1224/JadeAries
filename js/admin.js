@@ -1,7 +1,7 @@
 const API_URL = "/.netlify/functions/manageGuests";
 const AUTH_URL = "/.netlify/functions/admin-auth";
 const FOOD_REPORT_URL = "/.netlify/functions/exportFoodReport";
-const GUEST_ATTIRE_IMAGE = "/images/attire/guest-attire-reference.jpg";
+const GUEST_ATTIRE_IMAGE = "/images/attire/guest-attire-reference.png";
 
 const loginView = document.getElementById("login-view");
 const managerView = document.getElementById("manager-view");
@@ -19,9 +19,147 @@ const emptyState = document.getElementById("empty-state");
 const cateringTotals = document.getElementById("catering-totals");
 const downloadFoodPdf = document.getElementById("download-food-pdf");
 const downloadFoodExcel = document.getElementById("download-food-excel");
+const addGuestForm = document.getElementById("add-guest-form");
+const addGuestName = document.getElementById("add-guest-name");
+const addGuestRole = document.getElementById("add-guest-role");
+const addGuestButton = document.getElementById("add-guest-button");
+const addGuestMessage = document.getElementById("add-guest-message");
+const addAttirePreview = document.getElementById("add-attire-preview");
 
 let guests = [];
 let menuItems = [];
+
+const DEFAULT_ROLE_OPTIONS = [
+    "Bride",
+    "Groom",
+    "Parents",
+    "Best Man",
+    "Maid of Honour",
+    "Bridesmaid",
+    "Groomsmen",
+    "Groomsman",
+    "Ninong",
+    "Ninang",
+    "Proxy Ninong",
+    "Proxy Ninang",
+    "Guest",
+    "Guest - Officiant",
+    "Flower Girl",
+    "Ring Bearer",
+    "Bible Bearer",
+    "Coin Bearer"
+];
+
+const ATTIRE_BY_ROLE = {
+    Bride: {
+        displayName: "Bride",
+        attireName: "Bridal attire",
+        description: "White is lovingly reserved for the bride.",
+        imageUrl: "/images/attire/bride-dress-reference.jpg"
+    },
+    Groom: {
+        displayName: "Groom",
+        attireName: "Groom attire",
+        description: "Ivory / cream three-piece suit, white shirt, light pink tie, and brown shoes.",
+        imageUrl: "/images/attire/groom-suit-reference.jpg"
+    },
+    Parents: {
+        displayName: "Parents",
+        attireName: "Parents attire",
+        description: "Formal attire in a complementary pastel or neutral tone.",
+        imageUrl: "/images/attire/parents-father-suit-reference.jpg"
+    },
+    "Best Man": {
+        displayName: "Best Man",
+        attireName: "Best Man attire",
+        description: "Latte / taupe two-piece suit, white shirt, matching tie, no vest, and black shoes.",
+        imageUrl: "/images/attire/best-man-suit-reference.jpg"
+    },
+    "Maid of Honour": {
+        displayName: "Maid of Honour",
+        attireName: "Maid of Honour attire",
+        description: "Muted olive one-shoulder floor-length gown.",
+        imageUrl: "/images/attire/maid-of-honour-dress-reference.jpg"
+    },
+    Bridesmaid: {
+        displayName: "Bridesmaid",
+        attireName: "Bridesmaid attire",
+        description: "Floor-length A-line gown in lavender, blush, butter yellow, or sky blue.",
+        imageUrl: "/images/attire/bridesmaids-dress-reference.jpg"
+    },
+    Groomsmen: {
+        displayName: "Groomsman",
+        attireName: "Groomsmen attire",
+        description: "Light grey / stone two-piece suit, white undershirt, no tie, and black shoes.",
+        imageUrl: "/images/attire/groomsmen-suit-reference.jpg"
+    },
+    Groomsman: {
+        displayName: "Groomsman",
+        attireName: "Groomsman attire",
+        description: "Light grey / stone two-piece suit, white undershirt, no tie, and black shoes.",
+        imageUrl: "/images/attire/groomsmen-suit-reference.jpg"
+    },
+    Ninong: {
+        displayName: "Ninong",
+        attireName: "Ninong attire",
+        description: "Navy two-piece suit, white shirt, matching navy tie, and brown shoes.",
+        imageUrl: "/images/attire/ninong-suit-reference.jpg"
+    },
+    "Proxy Ninong": {
+        displayName: "Ninong",
+        attireName: "Ninong attire",
+        description: "Navy two-piece suit, white shirt, matching navy tie, and brown shoes.",
+        imageUrl: "/images/attire/ninong-suit-reference.jpg"
+    },
+    Ninang: {
+        displayName: "Ninang",
+        attireName: "Ninang attire",
+        description: "Dusty pink floor-length gown with off-the-shoulder sleeves.",
+        imageUrl: "/images/attire/ninang-dress-reference.jpg"
+    },
+    "Proxy Ninang": {
+        displayName: "Ninang",
+        attireName: "Ninang attire",
+        description: "Dusty pink floor-length gown with off-the-shoulder sleeves.",
+        imageUrl: "/images/attire/ninang-dress-reference.jpg"
+    },
+    Guest: {
+        displayName: "Wedding Guest",
+        attireName: "Guest attire",
+        description: "Semi-formal attire in one of the approved pastel palette colours.",
+        imageUrl: GUEST_ATTIRE_IMAGE
+    },
+    "Guest - Officiant": {
+        displayName: "Officiant",
+        attireName: "Officiant attire",
+        description: "Formal attire suitable for leading the ceremony.",
+        imageUrl: "/images/attire/officiant-attire-reference.png"
+    },
+    "Flower Girl": {
+        displayName: "Flower Girl",
+        attireName: "Flower girl attire",
+        description: "A pretty dress in a soft pastel shade.",
+        imageUrl: "/images/attire/flower-girls-dress-reference.png"
+    },
+    "Ring Bearer": {
+        displayName: "Ring Bearer",
+        attireName: "Ring bearer attire",
+        description: "A smart mini barong or suit.",
+        imageUrl: "/images/attire/bearers-suit-reference.jpg"
+    },
+    "Bible Bearer": {
+        displayName: "Bible Bearer",
+        attireName: "Bible bearer attire",
+        description: "A smart mini barong or suit.",
+        imageUrl: "/images/attire/bearers-suit-reference.jpg"
+    },
+    "Coin Bearer": {
+        displayName: "Coin Bearer",
+        attireName: "Coin bearer attire",
+        description: "A smart mini barong or suit.",
+        imageUrl: "/images/attire/bearers-suit-reference.jpg"
+    }
+};
 
 const nzd = new Intl.NumberFormat("en-NZ", {
     style: "currency",
@@ -57,6 +195,16 @@ function showMessage(message, isError = false) {
 
 function hideMessage() {
     managerMessage.hidden = true;
+}
+
+function showAddGuestMessage(message, isError = false) {
+    addGuestMessage.textContent = message;
+    addGuestMessage.classList.toggle("error", isError);
+    addGuestMessage.hidden = false;
+}
+
+function hideAddGuestMessage() {
+    addGuestMessage.hidden = true;
 }
 
 async function authRequest(method, body) {
@@ -157,6 +305,33 @@ function populateRoleFilter() {
     roleFilter.replaceChildren(new Option("All roles", ""));
     roles.forEach((role) => roleFilter.append(new Option(role, role)));
     roleFilter.value = roles.includes(current) ? current : "";
+}
+
+function roleOptionsFor(currentRole = "") {
+    return [...new Set([...DEFAULT_ROLE_OPTIONS, currentRole].filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right));
+}
+
+function populateRoleSelect(select, selectedValue) {
+    select.replaceChildren();
+    roleOptionsFor(selectedValue).forEach((role) => {
+        select.append(new Option(role, role));
+    });
+    select.value = selectedValue || "Guest";
+}
+
+function attireForRole(role, fallbackAttire) {
+    return ATTIRE_BY_ROLE[role] || fallbackAttire || {
+        displayName: role || "",
+        attireName: role ? `${role} attire` : "No attire assigned",
+        description: "Please contact the bride or groom for this guest's attire details.",
+        imageUrl: null
+    };
+}
+
+function updateAddAttirePreview() {
+    const attire = attireForRole(addGuestRole.value);
+    addAttirePreview.textContent = `Attire: ${attire.attireName}`;
 }
 
 function menuName(id) {
@@ -287,7 +462,9 @@ function renderGuests() {
         const notesInput = row.querySelector(".row-food-notes");
         const totalOutput = row.querySelector(".row-food-total");
         const nameInput = row.querySelector(".row-name");
+        const roleInput = row.querySelector(".row-role");
         const saveButton = row.querySelector(".save-row");
+        const deleteButton = row.querySelector(".delete-row");
 
         row.querySelector(".guest-heading").textContent = guest.name;
         row.querySelector(".guest-meta").textContent = [
@@ -297,7 +474,7 @@ function renderGuests() {
             guest.dessertId ? menuName(guest.dessertId) : "No dessert"
         ].join(" · ");
         nameInput.value = guest.name;
-        row.querySelector(".row-role").textContent = guest.role;
+        populateRoleSelect(roleInput, guest.role);
         const respondedTime = row.querySelector(".row-responded");
         respondedTime.textContent = formattedResponseTime(guest.respondedAt);
         if (guest.respondedAt) {
@@ -317,6 +494,13 @@ function renderGuests() {
         statusInput.addEventListener("change", () => {
             syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput);
         });
+        roleInput.addEventListener("change", () => {
+            renderGuestAttire(row, {
+                ...guest,
+                role: roleInput.value,
+                attire: attireForRole(roleInput.value, guest.attire)
+            });
+        });
         mainInput.addEventListener("change", () => updateFoodTotal(mainInput, dessertInput, totalOutput));
         dessertInput.addEventListener("change", () => updateFoodTotal(mainInput, dessertInput, totalOutput));
 
@@ -327,11 +511,15 @@ function renderGuests() {
                 if (fullName.length < 2 || fullName.length > 160) {
                     throw new Error("Guest name must be between 2 and 160 characters.");
                 }
+                if (!roleInput.value) {
+                    throw new Error("Choose a guest role.");
+                }
                 saveButton.disabled = true;
                 saveButton.textContent = "Saving…";
                 await apiRequest("PUT", {
                     id: guest.id,
                     name: fullName,
+                    role: roleInput.value,
                     status: statusInput.value,
                     mainId: mainInput.value || null,
                     dessertId: dessertInput.value || null,
@@ -344,6 +532,26 @@ function renderGuests() {
                 showMessage(error.message, true);
                 saveButton.disabled = false;
                 saveButton.textContent = "Save";
+            }
+        });
+
+        deleteButton.addEventListener("click", async () => {
+            const confirmed = window.confirm(`Remove ${guest.name} from the guest list? This cannot be undone.`);
+            if (!confirmed) return;
+
+            try {
+                hideMessage();
+                deleteButton.disabled = true;
+                saveButton.disabled = true;
+                deleteButton.textContent = "Deleting...";
+                await apiRequest("DELETE", { id: guest.id });
+                showMessage(`${guest.name} was removed from the guest list.`);
+                await loadGuests();
+            } catch (error) {
+                showMessage(error.message, true);
+                deleteButton.disabled = false;
+                saveButton.disabled = false;
+                deleteButton.textContent = "Delete";
             }
         });
 
@@ -448,11 +656,52 @@ logoutButton.addEventListener("click", async () => {
     passwordInput.focus();
 });
 
+addGuestForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    hideAddGuestMessage();
+    const fullName = addGuestName.value.trim().replace(/\s+/g, " ");
+
+    try {
+        if (fullName.length < 2 || fullName.length > 160) {
+            throw new Error("Guest name must be between 2 and 160 characters.");
+        }
+        if (!addGuestRole.value) {
+            throw new Error("Choose a guest role.");
+        }
+
+        addGuestButton.disabled = true;
+        addGuestButton.textContent = "Adding…";
+        await apiRequest("POST", {
+            name: fullName,
+            role: addGuestRole.value
+        });
+
+        addGuestName.value = "";
+        populateRoleSelect(addGuestRole, "Guest");
+        updateAddAttirePreview();
+        guestSearch.value = fullName;
+        statusFilter.value = "";
+        roleFilter.value = "";
+        await loadGuests();
+        showAddGuestMessage(`${fullName} was added to the guest list.`);
+    } catch (error) {
+        showAddGuestMessage(error.message, true);
+    } finally {
+        addGuestButton.disabled = false;
+        addGuestButton.textContent = "Add invitee";
+    }
+});
+
+addGuestRole.addEventListener("change", updateAddAttirePreview);
+
 [guestSearch, statusFilter, roleFilter].forEach((control) => {
     control.addEventListener(control === guestSearch ? "input" : "change", renderGuests);
 });
 downloadFoodPdf.addEventListener("click", () => downloadFoodReport("pdf", downloadFoodPdf));
 downloadFoodExcel.addEventListener("click", () => downloadFoodReport("xlsx", downloadFoodExcel));
+
+populateRoleSelect(addGuestRole, "Guest");
+updateAddAttirePreview();
 
 authRequest("GET")
     .then(loadGuests)
