@@ -16,7 +16,7 @@ if (!process.env.DATABASE_URL) {
 
 const DEFAULT_ATTIRE = {
   title: "Guest attire",
-  description: "Semi-formal attire in a whimsical pastel shade."
+  description: "Semi-formal attire with the wedding colour theme palette."
 };
 
 const ATTIRE_BY_ROLE = {
@@ -69,8 +69,8 @@ const ATTIRE_BY_ROLE = {
     description: "Formal attire in a complementary pastel or neutral tone."
   },
   "Flower Girl": {
-    title: "Flower girl attire",
-    description: "A pretty dress in a soft pastel shade."
+    title: "Whimsical colour dress",
+    description: "A whimsical colour dress."
   },
   "Ring Bearer": {
     title: "Ring bearer attire",

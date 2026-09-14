@@ -635,8 +635,17 @@ address {
     gap: 14px;
 }
 
+.rsvp-response,
 .attendance-choices {
     margin: 34px 0 30px;
+}
+
+.rsvp-response {
+    margin-bottom: 30px;
+}
+
+.rsvp-response .attendance-choices {
+    margin: 0;
 }
 
 .choice-card {
@@ -1953,6 +1962,98 @@ address {
     padding-bottom: 24px;
 }
 
+.wedding-countdown {
+    background: var(--white);
+    border: 1px solid var(--gold-line);
+    border-radius: 28px;
+    margin: 0 auto 40px;
+    padding: 28px 24px;
+    scroll-margin-top: 88px;
+    text-align: left;
+}
+
+.wedding-countdown h2 {
+    font-size: clamp(1.8rem, 3vw, 2.4rem);
+    margin: 0 0 10px;
+}
+
+.wedding-countdown .lead {
+    color: var(--muted);
+    margin: 0 0 18px;
+}
+
+.rsvp-countdown {
+    margin: 18px 0 0;
+}
+
+.rsvp-countdown-label,
+.rsvp-closed-note {
+    color: var(--sage);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin: 0 0 10px;
+    text-transform: uppercase;
+}
+
+.rsvp-closed-note {
+    color: var(--rose-dark);
+    margin-top: 16px;
+}
+
+.rsvp-closed-message {
+    align-items: center;
+    background: var(--rose-wash);
+    border: 1px solid var(--rose-soft);
+    border-radius: 22px;
+    color: var(--rose-dark);
+    display: flex;
+    font-family: var(--serif);
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    font-weight: 600;
+    justify-content: center;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin: 0;
+    min-height: 132px;
+    padding: 28px 24px;
+    text-align: center;
+}
+
+.rsvp-countdown-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rsvp-countdown-grid div {
+    background: var(--sage-wash);
+    border: 1px solid #d5ddcc;
+    border-radius: 16px;
+    padding: 10px 6px 8px;
+    text-align: center;
+}
+
+.rsvp-countdown-grid strong {
+    color: var(--rose);
+    display: block;
+    font-family: var(--serif);
+    font-size: clamp(1.6rem, 5vw, 2.2rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.rsvp-countdown-grid span {
+    color: var(--muted);
+    display: block;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    margin-top: 6px;
+    text-transform: uppercase;
+}
+
 .confirm-card {
     background: var(--white);
     border: 1px solid var(--gold-line);
@@ -2297,6 +2398,7 @@ address {
     .details-grid,
     .rsvp-footer,
     .dashboard-section,
+    .wedding-countdown,
     .entourage-banner {
         margin-left: auto;
         margin-right: auto;
@@ -2414,6 +2516,10 @@ address {
         min-width: 220px;
     }
 
+    .wedding-countdown {
+        padding: 32px 36px;
+    }
+
     .details-grid {
         gap: 20px;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2442,6 +2548,7 @@ address {
         margin: 12px 0 0;
     }
 
+    .rsvp-response,
     .attendance-choices {
         margin: 0;
     }
@@ -2487,6 +2594,7 @@ address {
     .details-grid,
     .rsvp-footer,
     .dashboard-section,
+    .wedding-countdown,
     .entourage-banner {
         max-width: 1280px;
     }

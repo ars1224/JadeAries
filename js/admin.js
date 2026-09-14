@@ -12,6 +12,7 @@ const logoutButton = document.getElementById("logout-button");
 const guestSearch = document.getElementById("guest-search");
 const statusFilter = document.getElementById("status-filter");
 const roleFilter = document.getElementById("role-filter");
+const menuFilter = document.getElementById("menu-filter");
 const guestList = document.getElementById("guest-list");
 const guestTemplate = document.getElementById("guest-row-template");
 const managerMessage = document.getElementById("manager-message");
@@ -22,6 +23,7 @@ const downloadFoodExcel = document.getElementById("download-food-excel");
 const addGuestForm = document.getElementById("add-guest-form");
 const addGuestName = document.getElementById("add-guest-name");
 const addGuestRole = document.getElementById("add-guest-role");
+const addGuestChild = document.getElementById("add-guest-child");
 const addGuestButton = document.getElementById("add-guest-button");
 const addGuestMessage = document.getElementById("add-guest-message");
 const addAttirePreview = document.getElementById("add-attire-preview");
@@ -49,6 +51,28 @@ const DEFAULT_ROLE_OPTIONS = [
     "Bible Bearer",
     "Coin Bearer"
 ];
+
+const CHILD_ROLES = new Set([
+    "Flower Girl",
+    "Ring Bearer",
+    "Bible Bearer",
+    "Coin Bearer"
+]);
+
+function isChildRole(role) {
+    return CHILD_ROLES.has(String(role || "").trim());
+}
+
+function usesKidsMenu(guest, role = guest?.role) {
+    return Boolean(guest?.isChild) || isChildRole(role);
+}
+
+function keepKidsTick(checkbox, guest, role) {
+    if (usesKidsMenu(guest, role)) {
+        checkbox.checked = true;
+    }
+    return checkbox.checked;
+}
 
 const ATTIRE_BY_ROLE = {
     Bride: {
@@ -126,7 +150,7 @@ const ATTIRE_BY_ROLE = {
     Guest: {
         displayName: "Wedding Guest",
         attireName: "Guest attire",
-        description: "Semi-formal attire in one of the approved pastel palette colours.",
+        description: "Semi-formal attire with the wedding colour theme palette.",
         imageUrl: GUEST_ATTIRE_IMAGE
     },
     "Guest - Officiant": {
@@ -137,8 +161,8 @@ const ATTIRE_BY_ROLE = {
     },
     "Flower Girl": {
         displayName: "Flower Girl",
-        attireName: "Flower girl attire",
-        description: "A pretty dress in a soft pastel shade.",
+        attireName: "Whimsical colour dress",
+        description: "A whimsical colour dress.",
         imageUrl: "/images/attire/flower-girls-dress-reference.png"
     },
     "Ring Bearer": {
@@ -348,16 +372,24 @@ function updateFoodTotal(mainInput, dessertInput, totalOutput) {
     totalOutput.textContent = totalOutput.value;
 }
 
-function populateFoodSelect(select, category, selectedValue) {
+function itemAudience(item) {
+    return String(item?.audience || "").toLowerCase() === "child" ? "child" : "adult";
+}
+
+function populateFoodSelect(select, category, selectedValue, isChild = false) {
+    const audience = isChild ? "child" : "adult";
     select.replaceChildren(new Option("Not selected", ""));
     menuItems
-        .filter((item) => item.category === category)
+        .filter((item) => item.category === category && itemAudience(item) === audience)
         .forEach((item) => {
             const dietaryCodes = normalizeDietaryCodes(item.dietaryCodes);
             const dietary = dietaryCodes.length ? ` · ${dietaryCodes.join("/")}` : "";
             select.append(new Option(`${item.name}${dietary} — ${nzd.format(item.price || 0)}`, item.id));
         });
     select.value = selectedValue || "";
+    if (select.value !== (selectedValue || "")) {
+        select.value = "";
+    }
 }
 
 function normalizeDietaryCodes(value) {
@@ -444,10 +476,12 @@ function renderGuests() {
     const query = guestSearch.value.trim().toLowerCase();
     const status = statusFilter.value;
     const role = roleFilter.value;
+    const menuType = menuFilter.value;
     const filteredGuests = guests.filter((guest) => (
         guest.name.toLowerCase().includes(query)
         && (!status || guest.status === status)
         && (!role || guest.role === role)
+        && (!menuType || (usesKidsMenu(guest) ? "child" : "adult") === menuType)
     ));
 
     guestList.replaceChildren();
@@ -463,12 +497,14 @@ function renderGuests() {
         const totalOutput = row.querySelector(".row-food-total");
         const nameInput = row.querySelector(".row-name");
         const roleInput = row.querySelector(".row-role");
+        const childInput = row.querySelector(".row-child");
         const saveButton = row.querySelector(".save-row");
         const deleteButton = row.querySelector(".delete-row");
 
         row.querySelector(".guest-heading").textContent = guest.name;
         row.querySelector(".guest-meta").textContent = [
             guest.role,
+            usesKidsMenu(guest) ? "Kids menu" : "Adult menu",
             titleCase(guest.status),
             guest.mainId ? menuName(guest.mainId) : "No main",
             guest.dessertId ? menuName(guest.dessertId) : "No dessert"
@@ -485,8 +521,9 @@ function renderGuests() {
         renderGuestAttire(row, guest);
 
         statusInput.value = guest.status;
-        populateFoodSelect(mainInput, "main", guest.mainId);
-        populateFoodSelect(dessertInput, "dessert", guest.dessertId);
+        childInput.checked = usesKidsMenu(guest);
+        populateFoodSelect(mainInput, "main", guest.mainId, childInput.checked);
+        populateFoodSelect(dessertInput, "dessert", guest.dessertId, childInput.checked);
         dietaryInput.value = guest.dietaryRequirements;
         notesInput.value = guest.foodNotes;
         syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput);
@@ -494,7 +531,24 @@ function renderGuests() {
         statusInput.addEventListener("change", () => {
             syncFoodFields(statusInput, mainInput, dessertInput, notesInput, dietaryInput, totalOutput);
         });
+        childInput.addEventListener("change", () => {
+            const isChild = keepKidsTick(childInput, { ...guest, isChild: childInput.checked }, roleInput.value);
+            row.querySelector(".guest-meta").textContent = [
+                roleInput.value,
+                isChild ? "Kids menu" : "Adult menu",
+                titleCase(statusInput.value),
+                mainInput.value ? menuName(mainInput.value) : "No main",
+                dessertInput.value ? menuName(dessertInput.value) : "No dessert"
+            ].join(" · ");
+            populateFoodSelect(mainInput, "main", mainInput.value, isChild);
+            populateFoodSelect(dessertInput, "dessert", dessertInput.value, isChild);
+            updateFoodTotal(mainInput, dessertInput, totalOutput);
+        });
         roleInput.addEventListener("change", () => {
+            const isChild = keepKidsTick(childInput, { ...guest, isChild: childInput.checked }, roleInput.value);
+            populateFoodSelect(mainInput, "main", mainInput.value, isChild);
+            populateFoodSelect(dessertInput, "dessert", dessertInput.value, isChild);
+            updateFoodTotal(mainInput, dessertInput, totalOutput);
             renderGuestAttire(row, {
                 ...guest,
                 role: roleInput.value,
@@ -520,6 +574,7 @@ function renderGuests() {
                     id: guest.id,
                     name: fullName,
                     role: roleInput.value,
+                    isChild: keepKidsTick(childInput, { ...guest, isChild: childInput.checked }, roleInput.value),
                     status: statusInput.value,
                     mainId: mainInput.value || null,
                     dessertId: dessertInput.value || null,
@@ -673,15 +728,18 @@ addGuestForm.addEventListener("submit", async (event) => {
         addGuestButton.textContent = "Adding…";
         await apiRequest("POST", {
             name: fullName,
-            role: addGuestRole.value
+            role: addGuestRole.value,
+            isChild: keepKidsTick(addGuestChild, { isChild: addGuestChild.checked }, addGuestRole.value)
         });
 
         addGuestName.value = "";
         populateRoleSelect(addGuestRole, "Guest");
+        addGuestChild.checked = false;
         updateAddAttirePreview();
         guestSearch.value = fullName;
         statusFilter.value = "";
         roleFilter.value = "";
+        menuFilter.value = "";
         await loadGuests();
         showAddGuestMessage(`${fullName} was added to the guest list.`);
     } catch (error) {
@@ -692,9 +750,17 @@ addGuestForm.addEventListener("submit", async (event) => {
     }
 });
 
-addGuestRole.addEventListener("change", updateAddAttirePreview);
+function syncAddChildFromRole() {
+    keepKidsTick(addGuestChild, { isChild: addGuestChild.checked }, addGuestRole.value);
+}
 
-[guestSearch, statusFilter, roleFilter].forEach((control) => {
+addGuestRole.addEventListener("change", () => {
+    syncAddChildFromRole();
+    updateAddAttirePreview();
+});
+addGuestChild.addEventListener("change", syncAddChildFromRole);
+
+[guestSearch, statusFilter, roleFilter, menuFilter].forEach((control) => {
     control.addEventListener(control === guestSearch ? "input" : "change", renderGuests);
 });
 downloadFoodPdf.addEventListener("click", () => downloadFoodReport("pdf", downloadFoodPdf));

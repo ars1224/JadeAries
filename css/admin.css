@@ -467,8 +467,34 @@ button,
     align-items: end;
     display: grid;
     gap: 12px;
-    grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(150px, 0.8fr));
-    width: min(680px, 100%);
+    grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(130px, 0.8fr));
+    width: min(860px, 100%);
+}
+
+.checkbox-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.checkbox-row {
+    align-items: flex-start;
+    color: var(--ink);
+    display: flex;
+    font-size: 0.82rem;
+    font-weight: 500;
+    gap: 10px;
+    letter-spacing: 0;
+    line-height: 1.4;
+    text-transform: none;
+}
+
+.checkbox-row input[type="checkbox"] {
+    accent-color: var(--sage);
+    flex: 0 0 auto;
+    height: 18px;
+    margin-top: 2px;
+    width: 18px;
 }
 
 .search-field { min-width: 0; }

@@ -80,7 +80,38 @@ const MENU_ITEMS = Object.freeze([
     dietaryCodes: ["G", "D", "VG"],
     price: 24,
   },
+  {
+    slug: "chicken_drums_rice_coleslaw",
+    category: "main",
+    name: "Chicken drums with rice and coleslaw",
+    description: "Crispy chicken drums served with rice and coleslaw",
+    image: "/images/food/chicken-drums-rice-coleslaw.jpg",
+    dietaryCodes: [],
+    audience: "child",
+    price: 25,
+  },
+  {
+    slug: "chocolate_brownie_whipped_cream",
+    category: "dessert",
+    name: "Chocolate Brownie with Whipped Cream",
+    description: "Warm chocolate brownie served with whipped cream",
+    image: "/images/food/chocolate-brownie-whipped-cream.jpg",
+    dietaryCodes: [],
+    audience: "child",
+    price: 12,
+  },
 ]);
+
+function menuAudience(value) {
+  return String(value || "").trim().toLowerCase() === "child" ? "child" : "adult";
+}
+
+function matchesMenuAudience(item, audience) {
+  if (audience !== "child" && audience !== "adult") {
+    return true;
+  }
+  return menuAudience(item?.audience) === audience;
+}
 
 function normalizeMenuName(value) {
   return String(value || "")
@@ -186,6 +217,8 @@ module.exports = {
   privateMenuPrice,
   normalizeDietaryCodes,
   normalizeMenuName,
+  menuAudience,
+  matchesMenuAudience,
   toSqlTextArray,
   ensureMenuItems,
   withMenuRetry,

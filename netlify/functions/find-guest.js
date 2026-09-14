@@ -21,6 +21,7 @@ function presentGuest(row) {
     fullName: row.full_name,
     role: row.role,
     rsvpStatus: row.rsvp_status,
+    isChild: Boolean(row.is_child),
     dietaryRequirements: row.dietary_requirements || "",
     attire: attire ? {
       displayName: attire.display_name,
@@ -55,20 +56,31 @@ exports.handler = async (event) => {
     return json(400, { error: "Please enter the full name shown on your invitation." });
   }
 
-  const select = [
+  const selectColumns = [
     "id",
     "full_name",
     "role",
     "rsvp_status",
     "dietary_requirements",
+    "is_child",
     "attire_profiles(display_name,attire_name,attire_description,primary_color,secondary_color,image_url)",
     "guest_food_choices(main_id,dessert_id,notes)",
-  ].join(",");
+  ];
 
   try {
-    const rows = await supabase.request(
-      `guests?select=${encodeURIComponent(select)}&normalized_name=eq.${encodeURIComponent(normalizedName)}&limit=2`
-    );
+    let rows;
+    try {
+      rows = await supabase.request(
+        `guests?select=${encodeURIComponent(selectColumns.join(","))}&normalized_name=eq.${encodeURIComponent(normalizedName)}&limit=2`
+      );
+    } catch (error) {
+      if (error?.code !== "PGRST204" && error?.code !== "42703") {
+        throw error;
+      }
+      rows = await supabase.request(
+        `guests?select=${encodeURIComponent(selectColumns.filter((column) => column !== "is_child").join(","))}&normalized_name=eq.${encodeURIComponent(normalizedName)}&limit=2`
+      );
+    }
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return json(404, { error: NOT_FOUND_MESSAGE });

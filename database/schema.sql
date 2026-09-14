@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS guests (
     full_name VARCHAR(120) NOT NULL,
     role VARCHAR(80) NOT NULL DEFAULT 'Guest',
     attire_title VARCHAR(120) NOT NULL DEFAULT 'Guest attire',
-    attire_description VARCHAR(500) NOT NULL DEFAULT 'Semi-formal attire in a whimsical pastel shade.',
+    attire_description VARCHAR(500) NOT NULL DEFAULT 'Semi-formal attire with the wedding colour theme palette.',
     palette TEXT[] NOT NULL DEFAULT ARRAY['#c7a6ed', '#ffc28e', '#ffe688', '#a9cfea']::TEXT[],
     rsvp_status VARCHAR(12) NOT NULL DEFAULT 'pending'
         CHECK (rsvp_status IN ('pending', 'attending', 'declined')),

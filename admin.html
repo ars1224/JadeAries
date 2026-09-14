@@ -58,6 +58,12 @@
                         <select id="add-guest-role"></select>
                         <span id="add-attire-preview" class="field-hint"></span>
                     </label>
+                    <label class="checkbox-field">Kid's menu
+                        <span class="checkbox-row">
+                            <input id="add-guest-child" type="checkbox">
+                            <span>Use the kids main and dessert only</span>
+                        </span>
+                    </label>
                     <button id="add-guest-button" class="span-two" type="submit">Add invitee</button>
                     <p id="add-guest-message" class="message span-two" role="status" hidden></p>
                 </form>
@@ -103,6 +109,13 @@
                             </select>
                         </label>
                         <label><span>Role</span><select id="role-filter"><option value="">All roles</option></select></label>
+                        <label><span>Menu</span>
+                            <select id="menu-filter">
+                                <option value="">All menus</option>
+                                <option value="adult">Adult menu</option>
+                                <option value="child">Kids menu</option>
+                            </select>
+                        </label>
                     </div>
                 </div>
 
@@ -126,6 +139,12 @@
                 <label>Full name<input class="row-name" maxlength="160" autocomplete="off" required></label>
                 <label>Role
                     <select class="row-role"></select>
+                </label>
+                <label class="checkbox-field">Kid's menu
+                    <span class="checkbox-row">
+                        <input class="row-child" type="checkbox">
+                        <span>Kids only see chicken drums and chocolate brownie</span>
+                    </span>
                 </label>
                 <div class="guest-readonly"><span>Responded</span><time class="row-responded"></time></div>
                 <label>Status

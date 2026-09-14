@@ -1,10 +1,10 @@
 const { isAdminAuthorized } = require("./lib/adminAuth");
 const { json, methodNotAllowed } = require("./lib/http");
-const { normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
+const { menuAudience, normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 const STATUSES = new Set(["pending", "attending", "not_attending"]);
-const MISSING_RPC_CODES = new Set(["PGRST202", "PGRST204"]);
+const MISSING_RPC_CODES = new Set(["PGRST202", "PGRST203", "PGRST204"]);
 
 const ATTIRE_PROFILE_NAMES_BY_ROLE = {
   "proxy ninong": ["ninong"],
@@ -46,8 +46,39 @@ function normalized(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function errorMessage(error) {
+  return String(error?.message || "");
+}
+
 function isMissingRpc(error) {
-  return MISSING_RPC_CODES.has(error?.code);
+  if (MISSING_RPC_CODES.has(error?.code)) {
+    return true;
+  }
+  return /p_is_child|could not find the function/i.test(errorMessage(error));
+}
+
+function isMissingWritableColumn(error) {
+  return error?.code === "PGRST204" || error?.code === "428C9" || error?.code === "42703";
+}
+
+function isMissingChildColumn(error) {
+  return isMissingWritableColumn(error) || /is_child/i.test(errorMessage(error));
+}
+
+function parseBoolean(value) {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+function generateInvitationCode() {
+  return `JA-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
+}
+
+function createdGuestId(payload) {
+  if (payload && typeof payload === "object" && !Array.isArray(payload) && payload.id) {
+    return payload.id;
+  }
+  const row = Array.isArray(payload) ? payload[0] : null;
+  return row?.id || "";
 }
 
 function notFoundError() {
@@ -82,30 +113,100 @@ async function findAttireProfileId(role) {
   return null;
 }
 
-async function updateGuestRole(guestId, role) {
+async function updateGuestRole(guestId, role, extra = {}) {
   const attireProfileId = await findAttireProfileId(role);
   const changes = {
     role,
     updated_at: new Date().toISOString(),
+    ...extra,
   };
   if (attireProfileId !== null) {
     changes.attire_profile_id = attireProfileId;
   }
 
-  const updated = await supabase.request(
-    `guests?id=eq.${encodeURIComponent(guestId)}&select=id`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: changes,
+  try {
+    const updated = await supabase.request(
+      `guests?id=eq.${encodeURIComponent(guestId)}&select=id`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: changes,
+      }
+    );
+    if (!Array.isArray(updated) || updated.length === 0) {
+      throw notFoundError();
     }
-  );
-  if (!Array.isArray(updated) || updated.length === 0) {
-    throw notFoundError();
+  } catch (error) {
+    if (!("is_child" in extra) || !isMissingWritableColumn(error)) {
+      throw error;
+    }
+    delete changes.is_child;
+    const updated = await supabase.request(
+      `guests?id=eq.${encodeURIComponent(guestId)}&select=id`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: changes,
+      }
+    );
+    if (!Array.isArray(updated) || updated.length === 0) {
+      throw notFoundError();
+    }
   }
 }
 
-async function createGuest(fullName, role) {
+function kidsMenuUnavailableError() {
+  const error = new Error(
+    "The kids menu is not set up yet. Run database/migrations/015_kids_guest_menu.sql in Supabase, then try again."
+  );
+  error.code = "P0001";
+  return error;
+}
+
+async function persistGuestChildFlag(guestId, isChild) {
+  try {
+    await supabase.request(
+      `guests?id=eq.${encodeURIComponent(guestId)}`,
+      {
+        method: "PATCH",
+        body: { is_child: isChild },
+      }
+    );
+  } catch (error) {
+    if (isMissingChildColumn(error)) {
+      if (isChild) {
+        throw kidsMenuUnavailableError();
+      }
+      return;
+    }
+    console.error("Could not persist kids-menu flag", {
+      status: error?.status,
+      code: error?.code,
+      message: error?.message,
+    });
+    if (isChild) {
+      throw kidsMenuUnavailableError();
+    }
+  }
+}
+
+async function insertGuestRecord(newGuest) {
+  const inserted = await supabase.request(
+    "guests?select=id,normalized_name",
+    {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: newGuest,
+    }
+  );
+  const guest = Array.isArray(inserted) ? inserted[0] : inserted;
+  if (!guest?.id) {
+    throw new Error("The new guest could not be created.");
+  }
+  return guest;
+}
+
+async function createGuestWithoutRpc(fullName, role, isChild) {
   const normalizedName = normalized(fullName);
   const existing = await supabase.request(
     `guests?select=id&normalized_name=eq.${encodeURIComponent(normalizedName)}&limit=1`
@@ -117,36 +218,89 @@ async function createGuest(fullName, role) {
   const attireProfileId = await findAttireProfileId(role);
   const newGuest = {
     full_name: fullName,
+    normalized_name: normalizedName,
     role,
     rsvp_status: "pending",
+    is_child: isChild,
   };
   if (attireProfileId !== null) {
     newGuest.attire_profile_id = attireProfileId;
   }
 
-  const inserted = await supabase.request(
-    "guests?select=id,normalized_name",
-    {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: newGuest,
+  let guest;
+  try {
+    guest = await insertGuestRecord(newGuest);
+  } catch (error) {
+    if (error?.code === "23502" && newGuest.invitation_code === undefined) {
+      newGuest.invitation_code = generateInvitationCode();
+      guest = await insertGuestRecord(newGuest);
+    } else if (isMissingWritableColumn(error)) {
+      delete newGuest.is_child;
+      delete newGuest.normalized_name;
+      try {
+        guest = await insertGuestRecord(newGuest);
+      } catch (retryError) {
+        if (retryError?.code === "23502" && newGuest.invitation_code === undefined) {
+          newGuest.invitation_code = generateInvitationCode();
+          guest = await insertGuestRecord(newGuest);
+        } else if (!isMissingWritableColumn(retryError)) {
+          throw retryError;
+        } else {
+          delete newGuest.attire_profile_id;
+          guest = await insertGuestRecord(newGuest);
+        }
+      }
+    } else {
+      throw error;
     }
-  );
-  const guest = Array.isArray(inserted) ? inserted[0] : null;
-  if (!guest?.id) {
-    throw new Error("The new guest could not be created.");
   }
 
   if (!guest.normalized_name) {
-    await supabase.request(
-      `guests?id=eq.${encodeURIComponent(guest.id)}`,
-      {
-        method: "PATCH",
-        body: { normalized_name: normalizedName },
-      }
-    );
+    try {
+      await supabase.request(
+        `guests?id=eq.${encodeURIComponent(guest.id)}`,
+        {
+          method: "PATCH",
+          body: { normalized_name: normalizedName },
+        }
+      );
+    } catch {
+      // Ignore generated or missing normalized_name columns.
+    }
   }
   return guest.id;
+}
+
+async function createGuest(fullName, role, isChild) {
+  try {
+    const created = await supabase.request("rpc/admin_create_guest", {
+      method: "POST",
+      body: { p_full_name: fullName, p_role: role, p_is_child: isChild },
+    });
+    const id = createdGuestId(created);
+    if (!id) {
+      throw new Error("The new guest could not be created.");
+    }
+    await persistGuestChildFlag(id, isChild);
+    return id;
+  } catch (error) {
+    if (!isMissingRpc(error)) throw error;
+    try {
+      const created = await supabase.request("rpc/admin_create_guest", {
+        method: "POST",
+        body: { p_full_name: fullName, p_role: role },
+      });
+      const id = createdGuestId(created);
+      if (!id) {
+        throw new Error("The new guest could not be created.");
+      }
+      await persistGuestChildFlag(id, isChild);
+      return id;
+    } catch (retryError) {
+      if (!isMissingRpc(retryError)) throw retryError;
+      return createGuestWithoutRpc(fullName, role, isChild);
+    }
+  }
 }
 
 async function deleteGuestWithoutRpc(guestId) {
@@ -166,6 +320,20 @@ async function deleteGuestWithoutRpc(guestId) {
   }
 }
 
+async function deleteGuest(guestId) {
+  try {
+    await supabase.request("rpc/admin_delete_guest", {
+      method: "POST",
+      body: { p_guest_id: guestId },
+    });
+  } catch (error) {
+    if (error?.code === "P0002") {
+      throw error;
+    }
+    await deleteGuestWithoutRpc(guestId);
+  }
+}
+
 function presentMenuItem(row) {
   return {
     id: String(row.id),
@@ -173,6 +341,7 @@ function presentMenuItem(row) {
     name: row.name,
     description: row.description || "",
     dietaryCodes: normalizeDietaryCodes(row.dietary_restrictions),
+    audience: menuAudience(row.audience),
     price: privateMenuPrice(row.name),
   };
 }
@@ -184,6 +353,7 @@ function presentGuest(row) {
     id: String(row.id),
     name: row.full_name,
     role: row.role || "Guest",
+    isChild: Boolean(row.is_child),
     status: row.rsvp_status,
     mainId: foodChoice?.main_id ? String(foodChoice.main_id) : null,
     dessertId: foodChoice?.dessert_id ? String(foodChoice.dessert_id) : null,
@@ -259,25 +429,42 @@ function buildDashboard(guests, menu) {
   };
 }
 
+async function requestRows(path, fallbackPath) {
+  try {
+    return await supabase.request(path);
+  } catch (error) {
+    if (!fallbackPath || (error?.code !== "PGRST204" && error?.code !== "42703")) {
+      throw error;
+    }
+    return supabase.request(fallbackPath);
+  }
+}
+
 async function loadDashboard() {
-  const guestSelect = [
+  const guestColumns = [
     "id",
     "full_name",
     "role",
     "rsvp_status",
     "responded_at",
     "dietary_requirements",
+    "is_child",
     "attire_profiles(display_name,attire_name,attire_description,image_url)",
     "guest_food_choices(main_id,dessert_id,notes)",
-  ].join(",");
-  const menuSelect = "id,course,name,description,dietary_restrictions,sort_order";
+  ];
+  const guestSelect = guestColumns.join(",");
+  const legacyGuestSelect = guestColumns.filter((column) => column !== "is_child").join(",");
+  const menuSelect = "id,course,name,description,dietary_restrictions,sort_order,audience";
+  const legacyMenuSelect = "id,course,name,description,dietary_restrictions,sort_order";
 
   const [guestRows, menuRows] = await Promise.all([
-    supabase.request(
-      `guests?select=${encodeURIComponent(guestSelect)}&order=full_name.asc&limit=1000`
+    requestRows(
+      `guests?select=${encodeURIComponent(guestSelect)}&order=full_name.asc&limit=1000`,
+      `guests?select=${encodeURIComponent(legacyGuestSelect)}&order=full_name.asc&limit=1000`
     ),
-    supabase.request(
-      `food_options?select=${encodeURIComponent(menuSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`
+    requestRows(
+      `food_options?select=${encodeURIComponent(menuSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`,
+      `food_options?select=${encodeURIComponent(legacyMenuSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`
     ),
   ]);
 
@@ -291,6 +478,7 @@ function adminError(error) {
     status: error?.status,
     code: error?.code,
     name: error?.name,
+    message: error?.message,
   });
 
   if (error?.code === "22023") {
@@ -313,7 +501,28 @@ function adminError(error) {
     });
   }
 
-  return json(500, { error: "The guest list could not be updated right now." });
+  if (error?.code === "P0001") {
+    return json(409, { error: error.message });
+  }
+
+  if (error?.code === "23503") {
+    return json(409, {
+      error: "This guest could not be removed because related records still exist.",
+    });
+  }
+
+  if (error?.code === "42501") {
+    return json(403, {
+      error: "The database role cannot change this guest. Run database/migrations/016_service_role_guest_privileges.sql in Supabase, then try again.",
+    });
+  }
+
+  if (isMissingChildColumn(error)) {
+    return json(409, { error: kidsMenuUnavailableError().message });
+  }
+
+  const code = error?.code ? ` (${error.code})` : "";
+  return json(500, { error: `The guest list could not be updated right now.${code}` });
 }
 
 exports.handler = async (event) => {
@@ -343,6 +552,7 @@ exports.handler = async (event) => {
   const guestId = requiredId(body.id);
   const fullName = String(body.name || "").trim().replace(/\s+/g, " ");
   const role = normalizeRole(body.role);
+  const isChild = parseBoolean(body.isChild);
   const status = String(body.status || "").trim().toLowerCase();
   const mainId = requiredId(body.mainId);
   const dessertId = requiredId(body.dessertId);
@@ -365,7 +575,7 @@ exports.handler = async (event) => {
     }
 
     try {
-      const id = await createGuest(fullName, role);
+      const id = await createGuest(fullName, role, isChild);
       return json(201, { success: true, id: String(id) });
     } catch (error) {
       return adminError(error);
@@ -378,15 +588,7 @@ exports.handler = async (event) => {
 
   if (event.httpMethod === "DELETE") {
     try {
-      try {
-        await supabase.request("rpc/admin_delete_guest", {
-          method: "POST",
-          body: { p_guest_id: guestId },
-        });
-      } catch (error) {
-        if (!isMissingRpc(error)) throw error;
-        await deleteGuestWithoutRpc(guestId);
-      }
+      await deleteGuest(guestId);
       return json(200, { success: true });
     } catch (error) {
       return adminError(error);
@@ -416,6 +618,7 @@ exports.handler = async (event) => {
       p_dessert_id: status === "attending" ? dessertId : null,
       p_dietary_requirements: status === "not_attending" ? "" : dietaryRequirements,
       p_notes: status === "attending" ? foodNotes : "",
+      p_is_child: isChild,
     };
 
     try {
@@ -425,13 +628,23 @@ exports.handler = async (event) => {
       });
     } catch (error) {
       if (!isMissingRpc(error)) throw error;
-      const { p_role: unusedRole, ...legacyUpdateBody } = updateBody;
-      await supabase.request("rpc/admin_update_guest", {
-        method: "POST",
-        body: legacyUpdateBody,
-      });
-      await updateGuestRole(guestId, role);
+      try {
+        const { p_is_child: unusedChild, ...roleAwareBody } = updateBody;
+        await supabase.request("rpc/admin_update_guest", {
+          method: "POST",
+          body: roleAwareBody,
+        });
+      } catch (retryError) {
+        if (!isMissingRpc(retryError)) throw retryError;
+        const { p_role: unusedRole, p_is_child: unusedChild, ...legacyUpdateBody } = updateBody;
+        await supabase.request("rpc/admin_update_guest", {
+          method: "POST",
+          body: legacyUpdateBody,
+        });
+        await updateGuestRole(guestId, role);
+      }
     }
+    await persistGuestChildFlag(guestId, isChild);
     return json(200, { success: true });
   } catch (error) {
     return adminError(error);

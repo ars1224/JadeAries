@@ -26,6 +26,16 @@ The existing Supabase tables and data remain in place. Run these migrations in o
 
 `database/migrations/011_sync_attire_when_role_changes.sql`
 
+`database/migrations/012_admin_create_guest.sql`
+
+`database/migrations/013_update_guest_attire_description.sql`
+
+`database/migrations/014_update_flower_girl_attire.sql`
+
+`database/migrations/015_kids_guest_menu.sql`
+
+`database/migrations/016_service_role_guest_privileges.sql`
+
 Migration `004` adds a normalized-name lookup index, enforces one food-choice row per guest, and creates the atomic `submit_guest_rsvp` RPC. It validates active main/dessert courses, updates RSVP and food together, and removes food choices when a guest changes to not attending. It does not disable RLS or remove migrated columns.
 
 The older `database/schema.sql` and migrations `001`–`003` belong to an abandoned direct-PostgreSQL prototype in this working tree. Do not run or import them into the prepared `aries-jade-wedding` Supabase project.
@@ -43,6 +53,16 @@ Migration `009` lets the admin dashboard assign `Proxy Ninong` and `Proxy Ninang
 Migration `010` adds a service-role-only admin delete operation. The private dashboard uses it to remove a guest and any saved food choice together.
 
 Migration `011` keeps the assigned attire profile in sync when the private dashboard changes a guest's role, including proxy sponsors and production label mismatches.
+
+Migration `012` adds a service-role-only admin create operation. The private dashboard uses it to add a pending invitee, assign role-matched attire, populate the normalized lookup value, and fill leftover required columns such as `invitation_code` when they still exist.
+
+Migration `013` updates the Guest and Wedding Guest attire profiles with the current colour-theme wording.
+
+Migration `014` changes the Flower Girl attire name from Baby Pink to Whimsical colour dress.
+
+Migration `015` adds a kids-menu flag on guests, a `child` food audience, and the kids dishes: chicken drums with rice and coleslaw, and chocolate brownie with whipped cream. Flower Girl and bearer roles are pre-marked as kids and can be changed in the admin dashboard. RSVP validation then keeps kids on the kids menu and adults on the current adult selections.
+
+Migration `016` restores service-role UPDATE/DELETE rights on guests and makes the admin update/delete RPCs security definer. Run it if the private dashboard returns Postgres `42501` when saving or deleting a guest.
 
 ## Netlify environment variables
 

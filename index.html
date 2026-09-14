@@ -86,6 +86,7 @@
                     <a href="#invitation-card">Invitation</a>
                     <a href="#schedule">Details</a>
                     <a href="#entourage">Entourage</a>
+                    <a href="#wedding-countdown">Countdown</a>
                     <a href="#rsvp">RSVP</a>
                 </nav>
             </header>
@@ -139,7 +140,7 @@
                         <div class="look-copy">
                             <div class="palette" aria-label="Wedding colour palette"></div>
                             <p id="attire-theme" class="look-theme">Whimsical pastel</p>
-                            <p id="attire-description">Semi-formal attire in a whimsical pastel shade.</p>
+                            <p id="attire-description">Semi-formal attire with the wedding colour theme palette.</p>
                             <p class="look-notes">No white · Please arrive on time<br>Unplugged ceremony</p>
                         </div>
                     </div>
@@ -186,23 +187,50 @@
                 <button id="entourage-button" class="button button-secondary" type="button">View full entourage</button>
             </section>
 
+            <section id="wedding-countdown" class="wedding-countdown" aria-live="polite">
+                <div>
+                    <p class="eyebrow">The wedding day</p>
+                    <h2>See you on 19 December</h2>
+                    <p class="lead">The ceremony begins at 4:00 PM New Zealand time.</p>
+                </div>
+                <div id="wedding-countdown-grid" class="rsvp-countdown-grid">
+                    <div><strong id="wedding-days">0</strong><span>Days</span></div>
+                    <div><strong id="wedding-hours">0</strong><span>Hours</span></div>
+                    <div><strong id="wedding-minutes">0</strong><span>Minutes</span></div>
+                    <div><strong id="wedding-seconds">0</strong><span>Seconds</span></div>
+                </div>
+                <p id="wedding-started-note" class="rsvp-closed-note" hidden>The celebration has begun.</p>
+            </section>
+
             <section id="rsvp" class="rsvp-footer">
                 <div>
                     <p class="eyebrow">Kindly respond</p>
                     <h2>Will we see you there?</h2>
-                    <p class="lead">RSVP closes 16 October 2026.</p>
+                    <p class="lead">RSVP closes 31 October 2026, New Zealand time.</p>
+                    <div id="rsvp-countdown" class="rsvp-countdown" aria-live="polite">
+                        <p class="rsvp-countdown-label">Time left to respond</p>
+                        <div class="rsvp-countdown-grid">
+                            <div><strong id="rsvp-days">0</strong><span>Days</span></div>
+                            <div><strong id="rsvp-hours">0</strong><span>Hours</span></div>
+                            <div><strong id="rsvp-minutes">0</strong><span>Minutes</span></div>
+                            <div><strong id="rsvp-seconds">0</strong><span>Seconds</span></div>
+                        </div>
+                    </div>
                     <p id="current-rsvp-status" class="saved-response" hidden></p>
                     <p id="attendance-error" class="form-message" role="alert" hidden></p>
                 </div>
-                <div class="choice-list attendance-choices">
-                    <button class="choice-card choice-card-positive" type="button" data-attending="true">
-                        <strong>Yes, I’ll be there</strong>
-                        <span>Continue to choose a meal</span>
-                    </button>
-                    <button class="choice-card choice-card-decline" type="button" data-attending="false">
-                        <strong>No, I can’t make it</strong>
-                        <span>Send regrets with love</span>
-                    </button>
+                <div class="rsvp-response">
+                    <div id="attendance-choices" class="choice-list attendance-choices">
+                        <button class="choice-card choice-card-positive" type="button" data-attending="true">
+                            <strong>Yes, I’ll be there</strong>
+                            <span>Continue to choose a meal</span>
+                        </button>
+                        <button class="choice-card choice-card-decline" type="button" data-attending="false">
+                            <strong>No, I can’t make it</strong>
+                            <span>Send regrets with love</span>
+                        </button>
+                    </div>
+                    <p id="rsvp-closed-note" class="rsvp-closed-message" hidden>RSVP is already closed.</p>
                 </div>
             </section>
         </section>
@@ -211,7 +239,7 @@
             <aside class="split-brand split-brand-meal">
                 <p class="eyebrow">One last detail</p>
                 <h1>What would you love to eat?</h1>
-                <p class="lead">Choose one main and one dessert, then tell us about any other dietary needs so we can look after you.</p>
+                <p id="meal-brand-lead" class="lead">Choose one main and one dessert, then tell us about any other dietary needs so we can look after you.</p>
                 <div class="dietary-key">
                     <p>Dietary code guide</p>
                     <dl>
@@ -225,7 +253,7 @@
             <form id="meal-form" class="split-main meal-content" novalidate>
                 <div class="split-card menu-card">
                     <h1>Meal preferences</h1>
-                    <p class="lead">Choose one main and one dessert for the reception.</p>
+                    <p id="meal-card-lead" class="lead">Choose one main and one dessert for the reception.</p>
                     <div class="dietary-key dietary-key-mobile mobile-only">
                         <p>Dietary code guide</p>
                         <dl>

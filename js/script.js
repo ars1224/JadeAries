@@ -21,6 +21,78 @@ let activeGuest = null;
 let menuById = new Map();
 let successReturnTimer = null;
 let submissionInProgress = false;
+let rsvpCountdownTimer = null;
+
+const RSVP_CLOSES_AT = Date.parse("2026-10-31T23:59:59.999+13:00");
+const WEDDING_STARTS_AT = Date.parse("2026-12-19T16:00:00+13:00");
+
+function timeLeftUntil(deadline, now = Date.now()) {
+    const ms = Math.max(0, deadline - now);
+    const totalSeconds = Math.floor(ms / 1000);
+    return {
+        days: Math.floor(totalSeconds / 86400),
+        hours: Math.floor((totalSeconds % 86400) / 3600),
+        minutes: Math.floor((totalSeconds % 3600) / 60),
+        seconds: totalSeconds % 60,
+        finished: ms <= 0
+    };
+}
+
+function fillCountdownUnits(prefix, left) {
+    const days = document.getElementById(`${prefix}-days`);
+    const hours = document.getElementById(`${prefix}-hours`);
+    const minutes = document.getElementById(`${prefix}-minutes`);
+    const seconds = document.getElementById(`${prefix}-seconds`);
+    if (!days || !hours || !minutes || !seconds) {
+        return;
+    }
+    days.textContent = String(left.days);
+    hours.textContent = String(left.hours);
+    minutes.textContent = String(left.minutes);
+    seconds.textContent = String(left.seconds);
+}
+
+function isRsvpClosed() {
+    return timeLeftUntil(RSVP_CLOSES_AT).finished;
+}
+
+function renderCountdowns() {
+    const rsvpLeft = timeLeftUntil(RSVP_CLOSES_AT);
+    const rsvpCountdown = document.getElementById("rsvp-countdown");
+    const rsvpClosedNote = document.getElementById("rsvp-closed-note");
+    const attendanceChoices = document.getElementById("attendance-choices");
+    fillCountdownUnits("rsvp", rsvpLeft);
+    if (rsvpCountdown) {
+        rsvpCountdown.hidden = rsvpLeft.finished;
+    }
+    if (attendanceChoices) {
+        attendanceChoices.hidden = rsvpLeft.finished;
+    }
+    if (rsvpClosedNote) {
+        rsvpClosedNote.hidden = !rsvpLeft.finished;
+    }
+    document.querySelectorAll("[data-attending]").forEach((button) => {
+        button.disabled = rsvpLeft.finished || submissionInProgress;
+    });
+    if (saveRsvpButton && !submissionInProgress) {
+        saveRsvpButton.disabled = rsvpLeft.finished;
+    }
+
+    const weddingLeft = timeLeftUntil(WEDDING_STARTS_AT);
+    const weddingGrid = document.getElementById("wedding-countdown-grid");
+    const weddingStartedNote = document.getElementById("wedding-started-note");
+    fillCountdownUnits("wedding", weddingLeft);
+    if (weddingGrid && weddingStartedNote) {
+        weddingGrid.hidden = weddingLeft.finished;
+        weddingStartedNote.hidden = !weddingLeft.finished;
+    }
+}
+
+function startRsvpCountdown() {
+    window.clearInterval(rsvpCountdownTimer);
+    renderCountdowns();
+    rsvpCountdownTimer = window.setInterval(renderCountdowns, 1000);
+}
 
 function returnToLookup() {
     activeGuest = null;
@@ -144,9 +216,39 @@ function createMenuOption(item, fieldName) {
     return label;
 }
 
-function renderMenu(menu) {
-    const mains = Array.isArray(menu?.mains) ? menu.mains : [];
-    const desserts = Array.isArray(menu?.desserts) ? menu.desserts : [];
+function itemAudience(item) {
+    return String(item?.audience || "").toLowerCase() === "child" ? "child" : "adult";
+}
+
+function menuForGuest(menu, isChild) {
+    const audience = isChild ? "child" : "adult";
+    const mains = (Array.isArray(menu?.mains) ? menu.mains : [])
+        .filter((item) => itemAudience(item) === audience);
+    const desserts = (Array.isArray(menu?.desserts) ? menu.desserts : [])
+        .filter((item) => itemAudience(item) === audience);
+    return { mains, desserts };
+}
+
+function updateMealCopy(isChild) {
+    const brandLead = document.getElementById("meal-brand-lead");
+    const cardLead = document.getElementById("meal-card-lead");
+    if (brandLead) {
+        brandLead.textContent = isChild
+            ? "This invitation uses the kids menu. Choose the kids main and dessert, then tell us about any other dietary needs."
+            : "Choose one main and one dessert, then tell us about any other dietary needs so we can look after you.";
+    }
+    if (cardLead) {
+        cardLead.textContent = isChild
+            ? "Kids menu: chicken drums with rice and coleslaw, and chocolate brownie with whipped cream."
+            : "Choose one main and one dessert for the reception.";
+    }
+    document.querySelectorAll(".dietary-key").forEach((element) => {
+        element.hidden = Boolean(isChild);
+    });
+}
+
+function renderMenu(menu, isChild = false) {
+    const { mains, desserts } = menuForGuest(menu, isChild);
     const allItems = [...mains, ...desserts];
     menuById = new Map(allItems.map((item) => [String(item.id), item]));
 
@@ -157,6 +259,15 @@ function renderMenu(menu) {
 
     mains.forEach((item) => mainOptions.append(createMenuOption(item, "meal")));
     desserts.forEach((item) => dessertOptions.append(createMenuOption(item, "dessert")));
+
+    if (mains.length === 1) {
+        mainOptions.querySelector('input[name="meal"]').checked = true;
+    }
+    if (desserts.length === 1) {
+        dessertOptions.querySelector('input[name="dessert"]').checked = true;
+    }
+
+    updateMealCopy(isChild);
 }
 
 function menuName(id) {
@@ -357,8 +468,11 @@ async function findGuest(name) {
     return parseResponse(response);
 }
 
-async function getMenu() {
-    const response = await fetch(API.getMenu, { headers: { Accept: "application/json" } });
+async function getMenu(isChild = false) {
+    const audience = isChild ? "child" : "adult";
+    const response = await fetch(`${API.getMenu}?audience=${audience}`, {
+        headers: { Accept: "application/json" }
+    });
     return parseResponse(response);
 }
 
@@ -400,8 +514,8 @@ lookupForm.addEventListener("submit", async (event) => {
     try {
         setLoading(lookupButton, true, "Finding your invitation…", "Get my invitation");
         const data = await findGuest(name);
-        const menu = await getMenu();
-        renderMenu(menu);
+        const menu = await getMenu(Boolean(data.guest?.isChild));
+        renderMenu(menu, Boolean(data.guest?.isChild));
         hydrateGuest(data.guest);
         showScreen("dashboard");
     } catch (error) {
@@ -436,7 +550,7 @@ document.querySelectorAll("[data-go]").forEach((control) => {
 });
 
 document.querySelector('[data-attending="true"]').addEventListener("click", () => {
-    if (submissionInProgress) {
+    if (submissionInProgress || isRsvpClosed()) {
         return;
     }
     clearInlineError(attendanceError);
@@ -444,7 +558,7 @@ document.querySelector('[data-attending="true"]').addEventListener("click", () =
 });
 
 document.querySelector('[data-attending="false"]').addEventListener("click", async () => {
-    if (submissionInProgress) {
+    if (submissionInProgress || isRsvpClosed()) {
         return;
     }
 
@@ -463,7 +577,7 @@ document.querySelector('[data-attending="false"]').addEventListener("click", asy
     } finally {
         savingOverlay.hidden = true;
         submissionInProgress = false;
-        document.querySelectorAll("[data-attending]").forEach((button) => { button.disabled = false; });
+        renderCountdowns();
     }
 });
 
@@ -474,6 +588,10 @@ mealForm.addEventListener("submit", async (event) => {
     }
 
     clearInlineError(mealError);
+    if (isRsvpClosed()) {
+        showInlineError(mealError, "RSVP is now closed.");
+        return;
+    }
 
     const formData = new FormData(mealForm);
     const mainId = formData.get("meal");
@@ -513,6 +631,7 @@ mealForm.addEventListener("submit", async (event) => {
     } finally {
         submissionInProgress = false;
         setLoading(saveRsvpButton, false, "Saving your response…", "Save preferences");
+        renderCountdowns();
     }
 });
 
@@ -729,6 +848,8 @@ attemptMusicPlayback().then((started) => {
         });
     }
 });
+
+startRsvpCountdown();
 
 const queryName = normalizeName(new URLSearchParams(window.location.search).get("name"));
 if (queryName) {

@@ -1,6 +1,6 @@
   class SupabaseRequestError extends Error {
-    constructor(status, code) {
-      super("Supabase request failed.");
+    constructor(status, code, message) {
+      super(message || "Supabase request failed.");
       this.name = "SupabaseRequestError";
       this.status = status;
       this.code = code || "";
@@ -54,7 +54,8 @@
   if (!response.ok) {
     throw new SupabaseRequestError(
       response.status,
-      payload?.code
+      payload?.code,
+      payload?.message
     );
   }
 

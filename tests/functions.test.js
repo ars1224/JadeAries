@@ -78,6 +78,7 @@ test("existing guest lookup returns only personalized fields", async () => {
   assert.equal(body.guest.attire.attireName, "Olive Green");
   assert.equal(body.guest.foodChoice.mainId, "main-1");
   assert.equal(body.guest.legacyId, undefined);
+  assert.equal(body.guest.isChild, false);
   assert.equal(verifyGuestToken(body.guest.token).guestId, "guest-7");
 });
 
@@ -122,6 +123,30 @@ test("menu returns active sorted course groups without prices", async () => {
   assert.deepEqual(body.mains.map((item) => item.id), ["m1"]);
   assert.deepEqual(body.desserts.map((item) => item.id), ["d1"]);
   assert.equal(body.mains[0].price, undefined);
+  assert.equal(body.mains[0].audience, "adult");
+});
+
+test("menu can return only kids or adult dishes", async () => {
+  const handler = loadHandler("../netlify/functions/get-menu", async () => [
+    { id: "m1", course: "main", name: "Adult main", audience: "adult" },
+    { id: "m2", course: "main", name: "Chicken drums with rice and coleslaw", audience: "child" },
+    { id: "d1", course: "dessert", name: "Adult dessert", audience: "adult" },
+    { id: "d2", course: "dessert", name: "Chocolate Brownie with Whipped Cream", audience: "child" },
+  ]);
+
+  const kids = jsonBody(await handler({
+    httpMethod: "GET",
+    queryStringParameters: { audience: "child" },
+  }));
+  const adults = jsonBody(await handler({
+    httpMethod: "GET",
+    queryStringParameters: { audience: "adult" },
+  }));
+
+  assert.deepEqual(kids.mains.map((item) => item.id), ["m2"]);
+  assert.deepEqual(kids.desserts.map((item) => item.id), ["d2"]);
+  assert.deepEqual(adults.mains.map((item) => item.id), ["m1"]);
+  assert.deepEqual(adults.desserts.map((item) => item.id), ["d1"]);
 });
 
 test("attending requires exactly one main and one dessert", async () => {
@@ -321,6 +346,52 @@ test("role-change migration maps common role labels to attire profiles", () => {
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
+test("admin create migration inserts a pending invitee and remains service-role-only", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "012_admin_create_guest.sql"),
+    "utf8"
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.admin_create_guest/i);
+  assert.match(sql, /SECURITY DEFINER/i);
+  assert.match(sql, /rsvp_status/i);
+  assert.match(sql, /normalized_name/i);
+  assert.match(sql, /invitation_code/i);
+  assert.match(sql, /WHEN 'proxy ninang' THEN ARRAY\['ninang'\]/i);
+  assert.match(sql, /ERRCODE = '23505'/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("service-role privilege migration restores admin update and delete rights", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "016_service_role_guest_privileges.sql"),
+    "utf8"
+  );
+  assert.match(sql, /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public\.guests TO service_role/i);
+  assert.match(sql, /ALTER FUNCTION %s SECURITY DEFINER/i);
+  assert.match(sql, /admin_delete_guest/i);
+  assert.match(sql, /admin_update_guest/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
+test("kids menu migration flags children and keeps adult dishes separate", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "015_kids_guest_menu.sql"),
+    "utf8"
+  );
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS is_child BOOLEAN NOT NULL DEFAULT FALSE/i);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT 'adult'/i);
+  assert.match(sql, /Chicken drums with rice and coleslaw/i);
+  assert.match(sql, /Chocolate Brownie with Whipped Cream/i);
+  assert.match(sql, /COALESCE\(audience, 'adult'\) = required_audience/i);
+  assert.match(sql, /p_is_child BOOLEAN DEFAULT FALSE/i);
+  assert.match(sql, /'flower girl', 'ring bearer', 'bible bearer', 'coin bearer'/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
 test("correct admin password creates an HttpOnly session and incorrect passwords are rejected", async () => {
   const modulePath = require.resolve("../netlify/functions/admin-auth");
   delete require.cache[modulePath];
@@ -428,6 +499,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
   assert.equal(body.catering.mains[0].unitPrice, 62);
   assert.equal(body.catering.mains[0].subtotal, 744);
   assert.equal(body.menu[0].price, 62);
+  assert.equal(body.guests[0].isChild, false);
   assert.equal(body.guests[0].foodNotes, "Sauce on the side");
   assert.deepEqual(body.guests[0].attire, {
     displayName: "Guest attire",
@@ -539,9 +611,14 @@ test("authenticated catering export handler returns downloadable PDF and Excel r
 test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
   let rpcBody;
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
-    assert.equal(requestPath, "rpc/admin_update_guest");
-    rpcBody = options.body;
-    return { rsvpStatus: "not_attending" };
+    if (requestPath === "rpc/admin_update_guest") {
+      rpcBody = options.body;
+      return { rsvpStatus: "not_attending" };
+    }
+    if (requestPath.startsWith("guests?id=eq.")) {
+      return [];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
   });
   const response = await handler({
     httpMethod: "PUT",
@@ -562,6 +639,7 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
   assert.equal(rpcBody.p_status, "not_attending");
   assert.equal(rpcBody.p_full_name, "Guest Seven");
   assert.equal(rpcBody.p_role, "Proxy Ninong");
+  assert.equal(rpcBody.p_is_child, false);
   assert.equal(rpcBody.p_main_id, null);
   assert.equal(rpcBody.p_dessert_id, null);
   assert.equal(rpcBody.p_dietary_requirements, "");
@@ -569,9 +647,64 @@ test("admin RSVP updates use the validated atomic RPC and clear food for not att
 });
 
 test("admin can add a pending invitee with role-matched attire", async () => {
+  let rpcBody;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    if (requestPath === "rpc/admin_create_guest") {
+      rpcBody = options.body;
+      return { id: "guest-new" };
+    }
+    if (requestPath.startsWith("guests?")) {
+      return [];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ name: "  New   Invitee ", role: "Proxy Ninang" }),
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(jsonBody(response), { success: true, id: "guest-new" });
+  assert.equal(rpcBody.p_full_name, "New Invitee");
+  assert.equal(rpcBody.p_role, "Proxy Ninang");
+  assert.equal(rpcBody.p_is_child, false);
+});
+
+test("admin can add a kid invitee for the kids menu", async () => {
+  let rpcBody;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    if (requestPath === "rpc/admin_create_guest") {
+      rpcBody = options.body;
+      return { id: "guest-kid" };
+    }
+    if (requestPath.startsWith("guests?")) {
+      return [];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ name: "Little Guest", role: "Flower Girl", isChild: true }),
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(jsonBody(response), { success: true, id: "guest-kid" });
+  assert.equal(rpcBody.p_full_name, "Little Guest");
+  assert.equal(rpcBody.p_role, "Flower Girl");
+  assert.equal(rpcBody.p_is_child, true);
+});
+
+test("admin add invitee remains compatible before the create RPC migration is installed", async () => {
   const calls = [];
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
     calls.push({ requestPath, options });
+    if (requestPath === "rpc/admin_create_guest") {
+      const error = new Error("RPC is missing");
+      error.code = "PGRST202";
+      throw error;
+    }
     if (requestPath.includes("normalized_name=eq.new%20invitee")) return [];
     if (requestPath.startsWith("attire_profiles?")) {
       return [{ id: "attire-ninang", display_name: "Ninang" }];
@@ -589,19 +722,58 @@ test("admin can add a pending invitee with role-matched attire", async () => {
 
   assert.equal(response.statusCode, 201);
   assert.deepEqual(jsonBody(response), { success: true, id: "guest-new" });
-  assert.equal(calls.length, 3);
-  assert.equal(calls[2].options.method, "POST");
-  assert.equal(calls[2].options.body.full_name, "New Invitee");
-  assert.equal(calls[2].options.body.role, "Proxy Ninang");
-  assert.equal(calls[2].options.body.rsvp_status, "pending");
-  assert.equal(calls[2].options.body.attire_profile_id, "attire-ninang");
+  assert.equal(calls.length, 5);
+  assert.equal(calls[0].requestPath, "rpc/admin_create_guest");
+  assert.equal(calls[0].options.body.p_is_child, false);
+  assert.equal(calls[1].requestPath, "rpc/admin_create_guest");
+  assert.equal("p_is_child" in calls[1].options.body, false);
+  assert.equal(calls[4].options.method, "POST");
+  assert.equal(calls[4].options.body.full_name, "New Invitee");
+  assert.equal(calls[4].options.body.normalized_name, "new invitee");
+  assert.equal(calls[4].options.body.role, "Proxy Ninang");
+  assert.equal(calls[4].options.body.rsvp_status, "pending");
+  assert.equal(calls[4].options.body.is_child, false);
+  assert.equal(calls[4].options.body.attire_profile_id, "attire-ninang");
+});
+
+test("admin add invitee fills leftover invitation codes when insert requires them", async () => {
+  const calls = [];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    calls.push({ requestPath, options });
+    if (requestPath === "rpc/admin_create_guest") {
+      const error = new Error("RPC is missing");
+      error.code = "PGRST202";
+      throw error;
+    }
+    if (requestPath.includes("normalized_name=eq.lilibeth%20aguinot")) return [];
+    if (requestPath.startsWith("attire_profiles?")) {
+      return [{ id: "attire-ninang", display_name: "Ninang" }];
+    }
+    if (requestPath === "guests?select=id,normalized_name") {
+      if (!options.body.invitation_code) {
+        throw new SupabaseRequestError(400, "23502", 'null value in column "invitation_code" of relation "guests" violates not-null constraint');
+      }
+      return [{ id: "guest-new", normalized_name: "lilibeth aguinot" }];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ name: "Lilibeth Aguinot", role: "Proxy Ninang" }),
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(jsonBody(response), { success: true, id: "guest-new" });
+  assert.match(calls.at(-1).options.body.invitation_code, /^JA-/);
+  assert.equal(calls.at(-1).options.body.normalized_name, "lilibeth aguinot");
 });
 
 test("admin add invitee rejects duplicate normalized names", async () => {
   let calls = 0;
   const handler = loadHandler("../netlify/functions/manageGuests", async () => {
     calls += 1;
-    return [{ id: "existing-guest" }];
+    throw new SupabaseRequestError(409, "23505");
   });
   const response = await handler({
     httpMethod: "POST",
@@ -618,7 +790,7 @@ test("admin updates remain compatible before the role-aware RPC migration is ins
   const calls = [];
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
     calls.push({ requestPath, options });
-    if (calls.length === 1) {
+    if (options?.body?.p_is_child !== undefined || options?.body?.p_role !== undefined) {
       const error = new Error("RPC signature is missing");
       error.code = "PGRST202";
       throw error;
@@ -646,16 +818,79 @@ test("admin updates remain compatible before the role-aware RPC migration is ins
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 6);
   assert.equal(calls[0].requestPath, "rpc/admin_update_guest");
   assert.equal(calls[0].options.body.p_role, "Proxy Ninong");
+  assert.equal(calls[0].options.body.p_is_child, false);
   assert.equal(calls[1].requestPath, "rpc/admin_update_guest");
-  assert.equal("p_role" in calls[1].options.body, false);
-  assert.match(calls[2].requestPath, /^attire_profiles\?/);
-  assert.match(calls[3].requestPath, /^guests\?id=eq\.guest-7/);
-  assert.equal(calls[3].options.method, "PATCH");
-  assert.equal(calls[3].options.body.role, "Proxy Ninong");
-  assert.equal(calls[3].options.body.attire_profile_id, "attire-ninong");
+  assert.equal("p_is_child" in calls[1].options.body, false);
+  assert.equal(calls[1].options.body.p_role, "Proxy Ninong");
+  assert.equal(calls[2].requestPath, "rpc/admin_update_guest");
+  assert.equal("p_role" in calls[2].options.body, false);
+  assert.equal("p_is_child" in calls[2].options.body, false);
+  assert.match(calls[3].requestPath, /^attire_profiles\?/);
+  assert.match(calls[4].requestPath, /^guests\?id=eq\.guest-7/);
+  assert.equal(calls[4].options.method, "PATCH");
+  assert.equal(calls[4].options.body.role, "Proxy Ninong");
+  assert.equal(calls[4].options.body.attire_profile_id, "attire-ninong");
+  assert.match(calls[5].requestPath, /^guests\?id=eq\.guest-7/);
+  assert.equal(calls[5].options.body.is_child, false);
+});
+
+test("admin still saves an adult guest when the kids column is missing", async () => {
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath) => {
+    if (requestPath === "rpc/admin_update_guest") {
+      return { success: true };
+    }
+    if (requestPath.startsWith("guests?id=eq.")) {
+      throw new SupabaseRequestError(
+        400,
+        "",
+        "Could not find the 'is_child' column of 'guests' in the schema cache"
+      );
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      name: "Local Diagnostic Invitee 005",
+      role: "Guest",
+      status: "pending",
+    }),
+  });
+
+  assert.equal(response.statusCode, 200);
+});
+
+test("admin persists a Guest-role kid flag after RSVP update", async () => {
+  let childPatch;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    if (requestPath === "rpc/admin_update_guest") {
+      return { success: true };
+    }
+    if (requestPath.startsWith("guests?id=eq.")) {
+      childPatch = options.body;
+      return [];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-princess",
+      name: "Princess Ananayeto",
+      role: "Guest",
+      status: "pending",
+      isChild: true,
+    }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(childPatch.is_child, true);
 });
 
 test("admin delete requests use the service-role-only delete RPC", async () => {
@@ -674,6 +909,33 @@ test("admin delete requests use the service-role-only delete RPC", async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(jsonBody(response), { success: true });
   assert.equal(rpcBody.p_guest_id, "guest-7");
+});
+
+test("admin delete falls back when the delete RPC fails for any reason", async () => {
+  const calls = [];
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
+    calls.push({ requestPath, options });
+    if (requestPath === "rpc/admin_delete_guest") {
+      throw new SupabaseRequestError(500, "XX000", "delete function failed");
+    }
+    if (requestPath.startsWith("guest_food_choices?")) {
+      return [];
+    }
+    if (requestPath.startsWith("guests?")) {
+      return [{ id: "guest-7" }];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({
+    httpMethod: "DELETE",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7" }),
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls[0].requestPath, "rpc/admin_delete_guest");
+  assert.match(calls[1].requestPath, /^guest_food_choices\?guest_id=eq\.guest-7$/);
+  assert.match(calls[2].requestPath, /^guests\?id=eq\.guest-7/);
 });
 
 test("admin delete remains compatible before the delete RPC migration is installed", async () => {
@@ -703,6 +965,20 @@ test("admin delete remains compatible before the delete RPC migration is install
   assert.equal(calls[1].options.method, "DELETE");
   assert.match(calls[2].requestPath, /^guests\?id=eq\.guest-7/);
   assert.equal(calls[2].options.headers.Prefer, "return=representation");
+});
+
+test("admin reports a privilege error with the service-role migration", async () => {
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    throw new SupabaseRequestError(403, "42501", "permission denied for table guests");
+  });
+  const response = await handler({
+    httpMethod: "DELETE",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id: "guest-7" }),
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.match(jsonBody(response).error, /016_service_role_guest_privileges/i);
 });
 
 test("admin delete rejects missing ids before calling Supabase", async () => {
@@ -820,6 +1096,9 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /id="add-guest-form"/);
   assert.match(html, /id="add-guest-name"/);
   assert.match(html, /id="add-guest-role"/);
+  assert.match(html, /id="add-guest-child"/);
+  assert.match(html, /id="menu-filter"/);
+  assert.match(html, /class="row-child"/);
   assert.match(html, />Add invitee<\/button>/);
   assert.match(script, /credentials: "same-origin"/);
   assert.match(script, /"Proxy Ninong"/);
@@ -830,7 +1109,12 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(script, /window\.confirm/);
   assert.match(script, /apiRequest\("DELETE", \{ id: guest\.id \}\)/);
   assert.match(script, /apiRequest\("POST", \{/);
-  assert.match(script, /addGuestRole\.addEventListener\("change", updateAddAttirePreview\)/);
+  assert.match(script, /isChild: keepKidsTick\(addGuestChild/);
+  assert.match(script, /isChild: keepKidsTick\(childInput/);
+  assert.match(script, /CHILD_ROLES/);
+  assert.match(script, /keepKidsTick/);
+  assert.match(script, /itemAudience\(item\) === audience/);
+  assert.match(script, /addGuestRole\.addEventListener\("change"/);
   assert.match(script, /nzd\.format\(summary\.cateringTotal/);
   assert.match(script, /Unit price:.*item\.unitPrice.*Subtotal:.*item\.subtotal/);
   assert.match(script, /assertDownloadBlob\(blob, format\)/);
@@ -838,6 +1122,7 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(script, /guest\.name\.toLowerCase\(\)\.includes\(query\)/);
   assert.match(script, /guest\.status === status/);
   assert.match(script, /guest\.role === role/);
+  assert.match(script, /usesKidsMenu\(guest\) \? "child" : "adult"/);
   assert.match(script, /p_role|role: roleInput\.value/);
   assert.match(script, /p_full_name|name: fullName/);
   assert.match(script, /renderGuestAttire\(row, guest\)/);
@@ -860,6 +1145,19 @@ test("frontend keeps full names intact, blocks duplicate submits, and preserves 
   assert.match(script, /weddingMusic\.play\(\)/);
   assert.match(script, /showPhotoFallback/);
   assert.match(script, /image\.onerror = showFallback/);
+  assert.match(script, /getMenu\(Boolean\(data\.guest\?\.isChild\)\)/);
+  assert.match(script, /menuForGuest\(menu, isChild\)/);
+  assert.match(script, /Kids menu: chicken drums with rice and coleslaw/);
+  assert.match(html, /id="rsvp-countdown"/);
+  assert.match(html, /id="wedding-countdown"/);
+  assert.match(html, /RSVP closes 31 October 2026/);
+  assert.match(script, /RSVP_CLOSES_AT = Date\.parse\("2026-10-31T23:59:59\.999\+13:00"\)/);
+  assert.match(script, /WEDDING_STARTS_AT = Date\.parse\("2026-12-19T16:00:00\+13:00"\)/);
+  assert.match(html, /RSVP is already closed/);
+  assert.match(html, /id="attendance-choices"/);
+  assert.match(script, /startRsvpCountdown\(\)/);
+  assert.match(css, /\.rsvp-countdown-grid/);
+  assert.match(css, /\.wedding-countdown/);
   assert.match(css, /@media \(max-width: 719px\)/);
   assert.match(css, /Photo unavailable/);
 });
