@@ -16,10 +16,10 @@ CREATE TABLE IF NOT EXISTS menu_items (
 INSERT INTO menu_items (slug, category, name, description, dietary_codes, price_nzd, sort_order)
 VALUES
     ('mediterranean_vegetable_charlotte', 'main', 'Mediterranean vegetable charlotte', 'Roquette, olive tapenade, cherry tomatoes, harissa oil', ARRAY['G', 'VG'], 45.00, 10),
-    ('confit_pork_belly', 'main', 'Confit pork belly – 200g', 'Rosemary crushed potatoes, crushed beets, garlic spinach, jus', ARRAY['G'], 52.00, 20),
-    ('lemon_baked_salmon', 'main', 'Lemon baked salmon – 170g', 'Potato gratin, spiced edamame cassoulet, miso dressing', ARRAY['G', 'D'], 59.00, 30),
-    ('roasted_beef_fillet', 'main', 'Roasted beef fillet – 180g', 'Rosemary crushed potatoes, charred broccolini, candied onion, jus', ARRAY['D', 'DO'], 62.00, 40),
-    ('chicken_thigh_white_wine_parmesan', 'main', 'Chicken thigh baked in white wine & parmesan cream – 180g', 'Potato gratin, broccolini, candied onion', ARRAY['G'], 50.00, 50),
+    ('confit_pork_belly', 'main', 'Confit pork belly', 'Rosemary crushed potatoes, crushed beets, garlic spinach, jus', ARRAY['G'], 52.00, 20),
+    ('lemon_baked_salmon', 'main', 'Lemon baked salmon', 'Potato gratin, spiced edamame cassoulet, miso dressing', ARRAY['G', 'D'], 59.00, 30),
+    ('roasted_beef_fillet', 'main', 'Roasted beef fillet', 'Rosemary crushed potatoes, charred broccolini, candied onion, jus', ARRAY['D', 'DO'], 62.00, 40),
+    ('chicken_thigh_white_wine_parmesan', 'main', 'Chicken thigh baked in white wine & parmesan cream', 'Potato gratin, broccolini, candied onion', ARRAY['G'], 50.00, 50),
     ('classic_tiramisu', 'dessert', 'Classic tiramisu', 'Espresso cream, lady fingers, cocoa', ARRAY[]::TEXT[], 22.00, 60),
     ('white_chocolate_cheesecake', 'dessert', 'White chocolate cheesecake', 'Berry coulis, freeze-dried raspberry', ARRAY[]::TEXT[], 22.00, 70),
     ('vanilla_bean_panna_cotta', 'dessert', 'Vanilla bean panna cotta', 'White chocolate cream, seasonal berries', ARRAY['G'], 22.00, 80),

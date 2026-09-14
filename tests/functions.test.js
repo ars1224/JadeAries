@@ -113,7 +113,7 @@ test("menu returns active sorted course groups without prices", async () => {
     assert.match(requestPath, /order=sort_order.asc/);
     assert.doesNotMatch(requestPath, /price/);
     return [
-      { id: "m1", course: "main", name: "Main", description: "Main description", dietary_restrictions: ["GF"], image_url: null },
+      { id: "m1", course: "main", name: "Roasted Beef Fillet – 180g", description: "Main description", dietary_restrictions: ["GF"], image_url: null },
       { id: "d1", course: "dessert", name: "Dessert", description: "Dessert description", dietary_restrictions: null, image_url: "/img/dessert.jpg" },
     ];
   });
@@ -122,6 +122,7 @@ test("menu returns active sorted course groups without prices", async () => {
   const body = jsonBody(response);
   assert.deepEqual(body.mains.map((item) => item.id), ["m1"]);
   assert.deepEqual(body.desserts.map((item) => item.id), ["d1"]);
+  assert.equal(body.mains[0].name, "Roasted Beef Fillet");
   assert.equal(body.mains[0].price, undefined);
   assert.equal(body.mains[0].audience, "adult");
 });
@@ -1100,6 +1101,7 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /id="menu-filter"/);
   assert.match(html, /class="row-child"/);
   assert.match(html, />Add invitee<\/button>/);
+  assert.match(script, /function displayMenuName/);
   assert.match(script, /credentials: "same-origin"/);
   assert.match(script, /"Proxy Ninong"/);
   assert.match(script, /"Proxy Ninang"/);
@@ -1143,6 +1145,8 @@ test("frontend keeps full names intact, blocks duplicate submits, and preserves 
   assert.match(script, /if \(submissionInProgress\)/);
   assert.match(html, /id="wedding-music"[\s\S]*\.mp3/);
   assert.match(script, /weddingMusic\.play\(\)/);
+  assert.match(script, /function displayMenuName/);
+  assert.match(script, /name\.textContent = displayMenuName\(item\.name\)/);
   assert.match(script, /showPhotoFallback/);
   assert.match(script, /image\.onerror = showFallback/);
   assert.match(script, /getMenu\(Boolean\(data\.guest\?\.isChild\)\)/);

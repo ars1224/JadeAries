@@ -11,7 +11,7 @@ const MENU_ITEMS = Object.freeze([
   {
     slug: "confit_pork_belly",
     category: "main",
-    name: "Confit pork belly – 200g",
+    name: "Confit pork belly",
     description: "Rosemary crushed potatoes, crushed beets, garlic spinach, jus",
     image: "/images/food/confit-pork-belly.jpg",
     dietaryCodes: ["G"],
@@ -20,7 +20,7 @@ const MENU_ITEMS = Object.freeze([
   {
     slug: "lemon_baked_salmon",
     category: "main",
-    name: "Lemon baked salmon – 170g",
+    name: "Lemon baked salmon",
     description: "Potato gratin, spiced edamame cassoulet, miso dressing",
     image: "/images/food/lemon-baked-salmon.jpg",
     dietaryCodes: ["G", "D"],
@@ -29,7 +29,7 @@ const MENU_ITEMS = Object.freeze([
   {
     slug: "roasted_beef_fillet",
     category: "main",
-    name: "Roasted beef fillet – 180g",
+    name: "Roasted beef fillet",
     description: "Rosemary crushed potatoes, charred broccolini, candied onion, jus",
     image: "/images/food/roasted-beef-fillet.jpg",
     dietaryCodes: ["D", "DO"],
@@ -38,7 +38,7 @@ const MENU_ITEMS = Object.freeze([
   {
     slug: "chicken_thigh_white_wine_parmesan",
     category: "main",
-    name: "Chicken thigh baked in white wine & parmesan cream – 180g",
+    name: "Chicken thigh baked in white wine & parmesan cream",
     description: "Potato gratin, broccolini, candied onion",
     image: "/images/food/chicken-thigh-white-wine-parmesan.jpg",
     dietaryCodes: ["G"],
@@ -113,9 +113,15 @@ function matchesMenuAudience(item, audience) {
   return menuAudience(item?.audience) === audience;
 }
 
-function normalizeMenuName(value) {
+function displayMenuName(value) {
   return String(value || "")
-    .trim()
+    .replace(/[\s]*[–—−-]\s*\d+(?:\.\d+)?\s*g\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMenuName(value) {
+  return displayMenuName(value)
     .toLowerCase()
     .replace(/[–—−]/g, "-")
     .replace(/\s+/g, " ");
@@ -216,6 +222,7 @@ module.exports = {
   publicMenuItems,
   privateMenuPrice,
   normalizeDietaryCodes,
+  displayMenuName,
   normalizeMenuName,
   menuAudience,
   matchesMenuAudience,

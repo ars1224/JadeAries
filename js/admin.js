@@ -358,8 +358,15 @@ function updateAddAttirePreview() {
     addAttirePreview.textContent = `Attire: ${attire.attireName}`;
 }
 
+function displayMenuName(value) {
+    return String(value || "")
+        .replace(/[\s]*[–—−-]\s*\d+(?:\.\d+)?\s*g\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 function menuName(id) {
-    return menuItems.find((item) => item.id === String(id))?.name || "";
+    return displayMenuName(menuItems.find((item) => item.id === String(id))?.name);
 }
 
 function foodPrice(id) {
@@ -384,7 +391,7 @@ function populateFoodSelect(select, category, selectedValue, isChild = false) {
         .forEach((item) => {
             const dietaryCodes = normalizeDietaryCodes(item.dietaryCodes);
             const dietary = dietaryCodes.length ? ` · ${dietaryCodes.join("/")}` : "";
-            select.append(new Option(`${item.name}${dietary} — ${nzd.format(item.price || 0)}`, item.id));
+            select.append(new Option(`${displayMenuName(item.name)}${dietary} — ${nzd.format(item.price || 0)}`, item.id));
         });
     select.value = selectedValue || "";
     if (select.value !== (selectedValue || "")) {

@@ -165,6 +165,13 @@ function showPhotoFallback(photo, label = "Photo unavailable") {
     photo.append(fallback);
 }
 
+function displayMenuName(value) {
+    return String(value || "")
+        .replace(/[\s]*[–—−-]\s*\d+(?:\.\d+)?\s*g\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 function createMenuOption(item, fieldName) {
     const label = document.createElement("label");
     label.className = "choice-card meal-option";
@@ -198,7 +205,7 @@ function createMenuOption(item, fieldName) {
     copy.className = "menu-option-copy";
 
     const name = document.createElement("strong");
-    name.textContent = item.name;
+    name.textContent = displayMenuName(item.name);
 
     const description = document.createElement("span");
     description.className = "menu-option-description";
@@ -271,7 +278,7 @@ function renderMenu(menu, isChild = false) {
 }
 
 function menuName(id) {
-    return menuById.get(String(id))?.name || "chosen";
+    return displayMenuName(menuById.get(String(id))?.name) || "chosen";
 }
 
 function fillConfirmedDish(kind, id) {
@@ -280,7 +287,7 @@ function fillConfirmedDish(kind, id) {
     const image = document.getElementById(`success-${kind}-image`);
     const frame = image?.closest(".confirmed-dish");
 
-    name.textContent = item?.name || menuName(id);
+    name.textContent = displayMenuName(item?.name) || menuName(id);
 
     if (!image) {
         return;
@@ -297,7 +304,7 @@ function fillConfirmedDish(kind, id) {
     if (item?.imageUrl) {
         image.onerror = showFallback;
         image.src = item.imageUrl;
-        image.alt = item.name;
+        image.alt = displayMenuName(item.name);
         image.hidden = false;
         frame?.classList.add("has-image");
         return;

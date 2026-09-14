@@ -1,5 +1,5 @@
 const { json, methodNotAllowed } = require("./lib/http");
-const { matchesMenuAudience, menuAudience } = require("./lib/menu");
+const { displayMenuName, matchesMenuAudience, menuAudience } = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 function requestedAudience(event) {
@@ -9,7 +9,7 @@ function requestedAudience(event) {
 function presentOption(row) {
   return {
     id: row.id,
-    name: row.name,
+    name: displayMenuName(row.name),
     description: row.description || "",
     dietaryRestrictions: row.dietary_restrictions || null,
     imageUrl: row.image_url || null,
