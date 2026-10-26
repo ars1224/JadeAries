@@ -1,4 +1,6 @@
-const ExcelJS = require("exceljs");
+// Use ExcelJS's self-contained build so Netlify does not need to reconstruct its
+// optional archiver/glob dependency tree inside the function bundle.
+const ExcelJS = require("exceljs/dist/exceljs.min.js");
 const PDFDocument = require("pdfkit");
 const { isAdminAuthorized } = require("./lib/adminAuth");
 const { buildFoodReport } = require("./lib/foodReport");

@@ -7,10 +7,7 @@
 
 [functions.exportFoodReport]
   node_bundler = "zisi"
-  included_files = [
-    "node_modules/pdfkit/js/data/**",
-    "node_modules/glob/**"
-  ]
+  included_files = ["node_modules/pdfkit/js/data/**"]
 
 [[redirects]]
   from = "/database/*"

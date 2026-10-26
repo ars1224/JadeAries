@@ -609,10 +609,15 @@ test("authenticated catering export handler returns downloadable PDF and Excel r
   }
 });
 
-test("Netlify export bundle includes PDF font data and glob's runtime entry point", () => {
+test("Netlify export uses the self-contained ExcelJS build and includes PDF font data", () => {
   const config = fs.readFileSync(path.join(__dirname, "..", "netlify.toml"), "utf8");
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "netlify", "functions", "exportFoodReport.js"),
+    "utf8"
+  );
   assert.match(config, /node_modules\/pdfkit\/js\/data\/\*\*/);
-  assert.match(config, /node_modules\/glob\/\*\*/);
+  assert.match(source, /require\("exceljs\/dist\/exceljs\.min\.js"\)/);
+  assert.doesNotMatch(source, /require\("exceljs"\)/);
 });
 
 test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
