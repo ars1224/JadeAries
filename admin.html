@@ -58,6 +58,9 @@
                         <select id="add-guest-role"></select>
                         <span id="add-attire-preview" class="field-hint"></span>
                     </label>
+                    <label>Table number
+                        <input id="add-guest-table" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Unassigned">
+                    </label>
                     <label class="checkbox-field">Kid's menu
                         <span class="checkbox-row">
                             <input id="add-guest-child" type="checkbox">
@@ -109,6 +112,7 @@
                             </select>
                         </label>
                         <label><span>Role</span><select id="role-filter"><option value="">All roles</option></select></label>
+                        <label><span>Table</span><select id="table-filter"><option value="">All tables</option><option value="unassigned">Unassigned</option></select></label>
                         <label><span>Menu</span>
                             <select id="menu-filter">
                                 <option value="">All menus</option>
@@ -139,6 +143,9 @@
                 <label>Full name<input class="row-name" maxlength="160" autocomplete="off" required></label>
                 <label>Role
                     <select class="row-role"></select>
+                </label>
+                <label>Table number
+                    <input class="row-table" type="number" min="1" max="999" step="1" inputmode="numeric" placeholder="Unassigned">
                 </label>
                 <label class="checkbox-field">Kid's menu
                     <span class="checkbox-row">

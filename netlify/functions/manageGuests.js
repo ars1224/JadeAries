@@ -69,6 +69,21 @@ function parseBoolean(value) {
   return value === true || value === "true" || value === 1 || value === "1";
 }
 
+function parseTableNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+  const text = String(value).trim();
+  if (!/^\d+$/.test(text)) {
+    throw new Error("invalid_table_number");
+  }
+  const tableNumber = Number(text);
+  if (!Number.isSafeInteger(tableNumber) || tableNumber < 1 || tableNumber > 999) {
+    throw new Error("invalid_table_number");
+  }
+  return tableNumber;
+}
+
 function generateInvitationCode() {
   return `JA-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
 }
@@ -161,6 +176,49 @@ function kidsMenuUnavailableError() {
   );
   error.code = "P0001";
   return error;
+}
+
+function tableAssignmentUnavailableError() {
+  const error = new Error(
+    "Table assignments are not set up yet. Run database/migrations/017_guest_table_assignments.sql in Supabase, then try again."
+  );
+  error.code = "TABLE_ASSIGNMENT_UNAVAILABLE";
+  return error;
+}
+
+function isMissingTableAssignment(error) {
+  return isMissingRpc(error)
+    || isMissingWritableColumn(error)
+    || /table_number|admin_set_guest_table/i.test(errorMessage(error));
+}
+
+async function ensureTableAssignmentAvailable() {
+  try {
+    await supabase.request("guests?select=table_number&limit=1");
+  } catch (error) {
+    if (isMissingTableAssignment(error)) {
+      throw tableAssignmentUnavailableError();
+    }
+    throw error;
+  }
+}
+
+async function persistGuestTableNumber(guestId, tableNumber) {
+  try {
+    await supabase.request("rpc/admin_set_guest_table", {
+      method: "POST",
+      body: {
+        p_guest_id: guestId,
+        p_table_number: tableNumber,
+      },
+    });
+  } catch (error) {
+    if (isMissingTableAssignment(error)) {
+      if (tableNumber === null) return;
+      throw tableAssignmentUnavailableError();
+    }
+    throw error;
+  }
 }
 
 async function persistGuestChildFlag(guestId, isChild) {
@@ -354,6 +412,9 @@ function presentGuest(row) {
     name: row.full_name,
     role: row.role || "Guest",
     isChild: Boolean(row.is_child),
+    tableNumber: row.table_number === null || row.table_number === undefined
+      ? null
+      : Number(row.table_number),
     status: row.rsvp_status,
     mainId: foodChoice?.main_id ? String(foodChoice.main_id) : null,
     dessertId: foodChoice?.dessert_id ? String(foodChoice.dessert_id) : null,
@@ -429,15 +490,19 @@ function buildDashboard(guests, menu) {
   };
 }
 
-async function requestRows(path, fallbackPath) {
-  try {
-    return await supabase.request(path);
-  } catch (error) {
-    if (!fallbackPath || (error?.code !== "PGRST204" && error?.code !== "42703")) {
-      throw error;
+async function requestRows(...paths) {
+  let lastError;
+  for (const path of paths.filter(Boolean)) {
+    try {
+      return await supabase.request(path);
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== "PGRST204" && error?.code !== "42703") {
+        throw error;
+      }
     }
-    return supabase.request(fallbackPath);
   }
+  throw lastError;
 }
 
 async function loadDashboard() {
@@ -449,17 +514,22 @@ async function loadDashboard() {
     "responded_at",
     "dietary_requirements",
     "is_child",
+    "table_number",
     "attire_profiles(display_name,attire_name,attire_description,image_url)",
     "guest_food_choices(main_id,dessert_id,notes)",
   ];
   const guestSelect = guestColumns.join(",");
-  const legacyGuestSelect = guestColumns.filter((column) => column !== "is_child").join(",");
+  const noTableGuestSelect = guestColumns.filter((column) => column !== "table_number").join(",");
+  const legacyGuestSelect = guestColumns.filter(
+    (column) => column !== "is_child" && column !== "table_number"
+  ).join(",");
   const menuSelect = "id,course,name,description,dietary_restrictions,sort_order,audience";
   const legacyMenuSelect = "id,course,name,description,dietary_restrictions,sort_order";
 
   const [guestRows, menuRows] = await Promise.all([
     requestRows(
       `guests?select=${encodeURIComponent(guestSelect)}&order=full_name.asc&limit=1000`,
+      `guests?select=${encodeURIComponent(noTableGuestSelect)}&order=full_name.asc&limit=1000`,
       `guests?select=${encodeURIComponent(legacyGuestSelect)}&order=full_name.asc&limit=1000`
     ),
     requestRows(
@@ -480,6 +550,10 @@ function adminError(error) {
     name: error?.name,
     message: error?.message,
   });
+
+  if (error?.code === "22003") {
+    return json(400, { error: "Table number must be a whole number between 1 and 999." });
+  }
 
   if (error?.code === "22023") {
     return json(400, {
@@ -502,6 +576,10 @@ function adminError(error) {
   }
 
   if (error?.code === "P0001") {
+    return json(409, { error: error.message });
+  }
+
+  if (error?.code === "TABLE_ASSIGNMENT_UNAVAILABLE") {
     return json(409, { error: error.message });
   }
 
@@ -553,11 +631,19 @@ exports.handler = async (event) => {
   const fullName = String(body.name || "").trim().replace(/\s+/g, " ");
   const role = normalizeRole(body.role);
   const isChild = parseBoolean(body.isChild);
+  const hasTableNumber = Object.prototype.hasOwnProperty.call(body, "tableNumber");
+  let tableNumber;
   const status = String(body.status || "").trim().toLowerCase();
   const mainId = requiredId(body.mainId);
   const dessertId = requiredId(body.dessertId);
   let dietaryRequirements;
   let foodNotes;
+
+  try {
+    tableNumber = parseTableNumber(body.tableNumber);
+  } catch {
+    return json(400, { error: "Table number must be a whole number between 1 and 999." });
+  }
 
   try {
     dietaryRequirements = optionalText(body.dietaryRequirements, 1_000);
@@ -575,7 +661,13 @@ exports.handler = async (event) => {
     }
 
     try {
+      if (hasTableNumber && tableNumber !== null) {
+        await ensureTableAssignmentAvailable();
+      }
       const id = await createGuest(fullName, role, isChild);
+      if (hasTableNumber) {
+        await persistGuestTableNumber(id, tableNumber);
+      }
       return json(201, { success: true, id: String(id) });
     } catch (error) {
       return adminError(error);
@@ -609,6 +701,9 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (hasTableNumber) {
+      await persistGuestTableNumber(guestId, tableNumber);
+    }
     const updateBody = {
       p_guest_id: guestId,
       p_full_name: fullName,

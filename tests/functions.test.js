@@ -393,6 +393,20 @@ test("kids menu migration flags children and keeps adult dishes separate", () =>
   assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
 });
 
+test("table assignment migration adds a constrained column and service-role-only RPC", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "database", "migrations", "017_guest_table_assignments.sql"),
+    "utf8"
+  );
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS table_number INTEGER/i);
+  assert.match(sql, /table_number BETWEEN 1 AND 999/i);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.admin_set_guest_table/i);
+  assert.match(sql, /SECURITY DEFINER/i);
+  assert.match(sql, /REVOKE ALL ON FUNCTION[\s\S]*anon, authenticated/i);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /DISABLE ROW LEVEL SECURITY/i);
+});
+
 test("correct admin password creates an HttpOnly session and incorrect passwords are rejected", async () => {
   const modulePath = require.resolve("../netlify/functions/admin-auth");
   delete require.cache[modulePath];
@@ -443,6 +457,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
       id: `guest-${index + 1}`,
       full_name: `Guest ${String(index + 1).padStart(2, "0")}`,
       role: index % 2 ? "Guest" : "Bridesmaid",
+      table_number: index === 0 ? 12 : null,
       rsvp_status: attending ? "attending" : (notAttending ? "not_attending" : "pending"),
       responded_at: attending || notAttending ? "2026-09-09T05:00:00Z" : null,
       dietary_requirements: index === 0 ? "Nut allergy" : "",
@@ -468,6 +483,7 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
     if (requestPath.startsWith("guests?")) {
       assert.doesNotMatch(requestPath, /legacy_id|attire_profile_id/);
       assert.match(requestPath, /attire_profiles/);
+      assert.match(requestPath, /table_number/);
       return guestRows;
     }
     if (requestPath.startsWith("food_options?")) {
@@ -481,6 +497,8 @@ test("Supabase admin dashboard loads all guests and calculates RSVP and catering
 
   assert.equal(response.statusCode, 200);
   assert.equal(body.guests.length, 80);
+  assert.equal(body.guests[0].tableNumber, 12);
+  assert.equal(body.guests[1].tableNumber, null);
   assert.deepEqual(body.summary, {
     total: 80,
     attending: 30,
@@ -520,6 +538,39 @@ test("admin dashboard rejects requests without a signed session before querying 
   const response = await handler({ httpMethod: "GET", headers: {} });
   assert.equal(response.statusCode, 401);
   assert.equal(calls, 0);
+});
+
+test("admin dashboard remains available before the table assignment migration is installed", async () => {
+  let guestCalls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath) => {
+    if (requestPath.startsWith("food_options?")) return [];
+    if (requestPath.startsWith("guests?")) {
+      guestCalls += 1;
+      if (requestPath.includes("table_number")) {
+        throw new SupabaseRequestError(
+          400,
+          "PGRST204",
+          "Could not find the 'table_number' column of 'guests' in the schema cache"
+        );
+      }
+      return [{
+        id: "guest-1",
+        full_name: "Kid Guest",
+        role: "Guest",
+        is_child: true,
+        rsvp_status: "pending",
+        attire_profiles: [],
+        guest_food_choices: [],
+      }];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+  const response = await handler({ httpMethod: "GET", headers: adminHeaders() });
+  const body = jsonBody(response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(guestCalls, 2);
+  assert.equal(body.guests[0].isChild, true);
+  assert.equal(body.guests[0].tableNumber, null);
 });
 
 test("Supabase catering export uses current food names and accurate selection totals", () => {
@@ -618,6 +669,98 @@ test("Netlify export uses the self-contained ExcelJS build and includes PDF font
   assert.match(config, /node_modules\/pdfkit\/js\/data\/\*\*/);
   assert.match(source, /require\("exceljs\/dist\/exceljs\.min\.js"\)/);
   assert.doesNotMatch(source, /require\("exceljs"\)/);
+});
+
+test("admin saves and clears guest table assignments through the private RPC", async () => {
+  let tableBody;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options = {}) => {
+    if (requestPath === "rpc/admin_set_guest_table") {
+      tableBody = options.body;
+      return { id: "guest-7", tableNumber: options.body.p_table_number };
+    }
+    if (requestPath === "rpc/admin_update_guest") {
+      return { success: true };
+    }
+    if (requestPath.startsWith("guests?id=eq.")) {
+      return [];
+    }
+    throw new Error(`Unexpected request: ${requestPath}`);
+  });
+
+  const assigned = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      name: "Guest Seven",
+      role: "Guest",
+      status: "pending",
+      tableNumber: 14,
+    }),
+  });
+  assert.equal(assigned.statusCode, 200);
+  assert.deepEqual(tableBody, { p_guest_id: "guest-7", p_table_number: 14 });
+
+  const cleared = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      name: "Guest Seven",
+      role: "Guest",
+      status: "pending",
+      tableNumber: null,
+    }),
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.deepEqual(tableBody, { p_guest_id: "guest-7", p_table_number: null });
+});
+
+test("admin rejects invalid table numbers before updating Supabase", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async () => {
+    calls += 1;
+    return {};
+  });
+  const response = await handler({
+    httpMethod: "PUT",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      id: "guest-7",
+      name: "Guest Seven",
+      role: "Guest",
+      status: "pending",
+      tableNumber: 0,
+    }),
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(jsonBody(response).error, /whole number between 1 and 999/i);
+  assert.equal(calls, 0);
+});
+
+test("admin prevents a partially-created guest when the table migration is missing", async () => {
+  let calls = 0;
+  const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath) => {
+    calls += 1;
+    assert.equal(requestPath, "guests?select=table_number&limit=1");
+    throw new SupabaseRequestError(
+      400,
+      "PGRST204",
+      "Could not find the 'table_number' column of 'guests' in the schema cache"
+    );
+  });
+  const response = await handler({
+    httpMethod: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      name: "New Seated Guest",
+      role: "Guest",
+      tableNumber: 8,
+    }),
+  });
+  assert.equal(response.statusCode, 409);
+  assert.match(jsonBody(response).error, /017_guest_table_assignments/i);
+  assert.equal(calls, 1);
 });
 
 test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
@@ -1097,6 +1240,7 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /id="guest-search"/);
   assert.match(html, /id="status-filter"/);
   assert.match(html, /id="role-filter"/);
+  assert.match(html, /id="table-filter"/);
   assert.match(html, /class="row-food-notes"/);
   assert.match(html, /<input class="row-name"[^>]*required>/);
   assert.match(html, /id="report-grand-total"/);
@@ -1108,9 +1252,11 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(html, /id="add-guest-form"/);
   assert.match(html, /id="add-guest-name"/);
   assert.match(html, /id="add-guest-role"/);
+  assert.match(html, /id="add-guest-table"/);
   assert.match(html, /id="add-guest-child"/);
   assert.match(html, /id="menu-filter"/);
   assert.match(html, /class="row-child"/);
+  assert.match(html, /class="row-table"/);
   assert.match(html, />Add invitee<\/button>/);
   assert.match(script, /function displayMenuName/);
   assert.match(script, /credentials: "same-origin"/);
@@ -1123,6 +1269,7 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(script, /apiRequest\("DELETE", \{ id: guest\.id \}\)/);
   assert.match(script, /apiRequest\("POST", \{/);
   assert.match(script, /isChild: keepKidsTick\(addGuestChild/);
+  assert.match(script, /tableNumber: tableNumberValue\(addGuestTable\)/);
   assert.match(script, /isChild: keepKidsTick\(childInput/);
   assert.match(script, /CHILD_ROLES/);
   assert.match(script, /keepKidsTick/);
@@ -1135,6 +1282,8 @@ test("admin frontend uses cookie sessions, name search, RSVP and role filters, a
   assert.match(script, /guest\.name\.toLowerCase\(\)\.includes\(query\)/);
   assert.match(script, /guest\.status === status/);
   assert.match(script, /guest\.role === role/);
+  assert.match(script, /guest\.tableNumber === null/);
+  assert.match(script, /tableNumber: tableNumberValue\(tableInput\)/);
   assert.match(script, /usesKidsMenu\(guest\) \? "child" : "adult"/);
   assert.match(script, /p_role|role: roleInput\.value/);
   assert.match(script, /p_full_name|name: fullName/);

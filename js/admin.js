@@ -12,6 +12,7 @@ const logoutButton = document.getElementById("logout-button");
 const guestSearch = document.getElementById("guest-search");
 const statusFilter = document.getElementById("status-filter");
 const roleFilter = document.getElementById("role-filter");
+const tableFilter = document.getElementById("table-filter");
 const menuFilter = document.getElementById("menu-filter");
 const guestList = document.getElementById("guest-list");
 const guestTemplate = document.getElementById("guest-row-template");
@@ -23,6 +24,7 @@ const downloadFoodExcel = document.getElementById("download-food-excel");
 const addGuestForm = document.getElementById("add-guest-form");
 const addGuestName = document.getElementById("add-guest-name");
 const addGuestRole = document.getElementById("add-guest-role");
+const addGuestTable = document.getElementById("add-guest-table");
 const addGuestChild = document.getElementById("add-guest-child");
 const addGuestButton = document.getElementById("add-guest-button");
 const addGuestMessage = document.getElementById("add-guest-message");
@@ -331,6 +333,37 @@ function populateRoleFilter() {
     roleFilter.value = roles.includes(current) ? current : "";
 }
 
+function populateTableFilter() {
+    const current = tableFilter.value;
+    const tableNumbers = [...new Set(
+        guests.map((guest) => guest.tableNumber).filter((value) => Number.isInteger(value))
+    )].sort((left, right) => left - right);
+    tableFilter.replaceChildren(
+        new Option("All tables", ""),
+        new Option("Unassigned", "unassigned")
+    );
+    tableNumbers.forEach((tableNumber) => {
+        tableFilter.append(new Option(`Table ${tableNumber}`, String(tableNumber)));
+    });
+    tableFilter.value = current === "unassigned" || tableNumbers.includes(Number(current))
+        ? current
+        : "";
+}
+
+function tableNumberValue(input) {
+    const value = String(input.value || "").trim();
+    if (!value) return null;
+    const tableNumber = Number(value);
+    if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > 999) {
+        throw new Error("Table number must be a whole number between 1 and 999.");
+    }
+    return tableNumber;
+}
+
+function tableLabel(value) {
+    return value ? `Table ${value}` : "Table unassigned";
+}
+
 function roleOptionsFor(currentRole = "") {
     return [...new Set([...DEFAULT_ROLE_OPTIONS, currentRole].filter(Boolean))]
         .sort((left, right) => left.localeCompare(right));
@@ -483,11 +516,15 @@ function renderGuests() {
     const query = guestSearch.value.trim().toLowerCase();
     const status = statusFilter.value;
     const role = roleFilter.value;
+    const table = tableFilter.value;
     const menuType = menuFilter.value;
     const filteredGuests = guests.filter((guest) => (
         guest.name.toLowerCase().includes(query)
         && (!status || guest.status === status)
         && (!role || guest.role === role)
+        && (!table || (table === "unassigned"
+            ? guest.tableNumber === null
+            : String(guest.tableNumber) === table))
         && (!menuType || (usesKidsMenu(guest) ? "child" : "adult") === menuType)
     ));
 
@@ -504,6 +541,7 @@ function renderGuests() {
         const totalOutput = row.querySelector(".row-food-total");
         const nameInput = row.querySelector(".row-name");
         const roleInput = row.querySelector(".row-role");
+        const tableInput = row.querySelector(".row-table");
         const childInput = row.querySelector(".row-child");
         const saveButton = row.querySelector(".save-row");
         const deleteButton = row.querySelector(".delete-row");
@@ -511,6 +549,7 @@ function renderGuests() {
         row.querySelector(".guest-heading").textContent = guest.name;
         row.querySelector(".guest-meta").textContent = [
             guest.role,
+            tableLabel(guest.tableNumber),
             usesKidsMenu(guest) ? "Kids menu" : "Adult menu",
             titleCase(guest.status),
             guest.mainId ? menuName(guest.mainId) : "No main",
@@ -518,6 +557,7 @@ function renderGuests() {
         ].join(" · ");
         nameInput.value = guest.name;
         populateRoleSelect(roleInput, guest.role);
+        tableInput.value = guest.tableNumber ?? "";
         const respondedTime = row.querySelector(".row-responded");
         respondedTime.textContent = formattedResponseTime(guest.respondedAt);
         if (guest.respondedAt) {
@@ -542,6 +582,7 @@ function renderGuests() {
             const isChild = keepKidsTick(childInput, { ...guest, isChild: childInput.checked }, roleInput.value);
             row.querySelector(".guest-meta").textContent = [
                 roleInput.value,
+                tableLabel(tableInput.value),
                 isChild ? "Kids menu" : "Adult menu",
                 titleCase(statusInput.value),
                 mainInput.value ? menuName(mainInput.value) : "No main",
@@ -581,6 +622,7 @@ function renderGuests() {
                     id: guest.id,
                     name: fullName,
                     role: roleInput.value,
+                    tableNumber: tableNumberValue(tableInput),
                     isChild: keepKidsTick(childInput, { ...guest, isChild: childInput.checked }, roleInput.value),
                     status: statusInput.value,
                     mainId: mainInput.value || null,
@@ -628,6 +670,7 @@ async function loadGuests() {
     renderSummary(data.summary);
     renderCatering(data.catering);
     populateRoleFilter();
+    populateTableFilter();
     renderGuests();
 }
 
@@ -736,16 +779,19 @@ addGuestForm.addEventListener("submit", async (event) => {
         await apiRequest("POST", {
             name: fullName,
             role: addGuestRole.value,
+            tableNumber: tableNumberValue(addGuestTable),
             isChild: keepKidsTick(addGuestChild, { isChild: addGuestChild.checked }, addGuestRole.value)
         });
 
         addGuestName.value = "";
+        addGuestTable.value = "";
         populateRoleSelect(addGuestRole, "Guest");
         addGuestChild.checked = false;
         updateAddAttirePreview();
         guestSearch.value = fullName;
         statusFilter.value = "";
         roleFilter.value = "";
+        tableFilter.value = "";
         menuFilter.value = "";
         await loadGuests();
         showAddGuestMessage(`${fullName} was added to the guest list.`);
@@ -767,7 +813,7 @@ addGuestRole.addEventListener("change", () => {
 });
 addGuestChild.addEventListener("change", syncAddChildFromRole);
 
-[guestSearch, statusFilter, roleFilter, menuFilter].forEach((control) => {
+[guestSearch, statusFilter, roleFilter, tableFilter, menuFilter].forEach((control) => {
     control.addEventListener(control === guestSearch ? "input" : "change", renderGuests);
 });
 downloadFoodPdf.addEventListener("click", () => downloadFoodReport("pdf", downloadFoodPdf));

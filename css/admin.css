@@ -467,8 +467,8 @@ button,
     align-items: end;
     display: grid;
     gap: 12px;
-    grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(130px, 0.8fr));
-    width: min(860px, 100%);
+    grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(120px, 0.8fr));
+    width: min(1000px, 100%);
 }
 
 .checkbox-field {
