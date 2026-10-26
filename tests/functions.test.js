@@ -609,6 +609,12 @@ test("authenticated catering export handler returns downloadable PDF and Excel r
   }
 });
 
+test("Netlify export bundle includes PDF font data and glob's runtime entry point", () => {
+  const config = fs.readFileSync(path.join(__dirname, "..", "netlify.toml"), "utf8");
+  assert.match(config, /node_modules\/pdfkit\/js\/data\/\*\*/);
+  assert.match(config, /node_modules\/glob\/\*\*/);
+});
+
 test("admin RSVP updates use the validated atomic RPC and clear food for not attending", async () => {
   let rpcBody;
   const handler = loadHandler("../netlify/functions/manageGuests", async (requestPath, options) => {
