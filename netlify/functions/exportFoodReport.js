@@ -3,7 +3,11 @@ const PDFDocument = require("pdfkit");
 const { isAdminAuthorized } = require("./lib/adminAuth");
 const { buildFoodReport } = require("./lib/foodReport");
 const { json, methodNotAllowed } = require("./lib/http");
-const { normalizeDietaryCodes, privateMenuPrice } = require("./lib/menu");
+const {
+  displayMenuName,
+  normalizeDietaryCodes,
+  privateMenuPrice,
+} = require("./lib/menu");
 const supabase = require("./lib/supabase");
 
 const BRAND = {
@@ -380,7 +384,7 @@ function buildSupabaseFoodReport(guestRows, optionRows) {
   const menu = (Array.isArray(optionRows) ? optionRows : []).map((row) => ({
     slug: String(row.id),
     category: row.course,
-    name: row.name,
+    name: displayMenuName(row.name),
     description: row.description || "",
     dietaryCodes: normalizeDietaryCodes(row.dietary_restrictions),
     price: privateMenuPrice(row.name),

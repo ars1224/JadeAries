@@ -544,7 +544,7 @@ test("Supabase catering export uses current food names and accurate selection to
 
   assert.equal(report.mainCount, 2);
   assert.equal(report.dessertCount, 2);
-  assert.equal(report.sections[0].items[0].name, "Roasted Beef Fillet – 180g");
+  assert.equal(report.sections[0].items[0].name, "Roasted Beef Fillet");
   assert.equal(report.sections[0].items[0].unitPrice, 62);
   assert.equal(report.sections[0].items[0].subtotal, 124);
   assert.deepEqual(report.sections[0].items[0].dietaryCodes, ["D", "DO"]);
