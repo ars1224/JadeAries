@@ -46,24 +46,17 @@ function currency(value) {
   }).format(Number(value || 0));
 }
 
-function excelCellResult(cell) {
-  return typeof cell.value === "object" && cell.value?.result !== undefined
-    ? cell.value.result
-    : cell.value;
-}
-
 async function createExcel(report) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Jhon Aries & Charmie Jade";
   workbook.created = report.generatedAt;
   workbook.modified = report.generatedAt;
-  workbook.calcProperties.fullCalcOnLoad = true;
 
-  const sheet = workbook.addWorksheet("Food orders", {
-    properties: { defaultRowHeight: 20 },
-    views: [{ state: "frozen", ySplit: 7, showGridLines: false }],
+  const sheet = workbook.addWorksheet("Table assignments", {
+    properties: { defaultRowHeight: 22 },
+    views: [{ state: "frozen", ySplit: 1, showGridLines: false }],
     pageSetup: {
-      orientation: "landscape",
+      orientation: "portrait",
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
@@ -72,154 +65,47 @@ async function createExcel(report) {
   });
 
   sheet.columns = [
-    { key: "category", width: 13 },
-    { key: "item", width: 42 },
-    { key: "codes", width: 16 },
-    { key: "price", width: 17 },
-    { key: "quantity", width: 12 },
-    { key: "subtotal", width: 18 },
-    { key: "guests", width: 34 },
-    { key: "notes", width: 36 },
+    { header: "Table #", key: "tableNumber", width: 13 },
+    { header: "Name", key: "name", width: 34 },
+    { header: "Main", key: "main", width: 48 },
+    { header: "Dessert", key: "dessert", width: 38 },
   ];
 
-  sheet.getCell("A1").value = "Food orders";
-  sheet.getCell("A1").font = {
-    name: "Arial",
-    size: 16,
-    bold: true,
-    color: { argb: "FFC96582" },
-  };
-  sheet.getCell("A2").value =
-    `Jhon Aries & Charmie Jade | Private catering report | Generated ${reportDate(report.generatedAt)}`;
-  sheet.getCell("A2").font = {
-    name: "Arial",
-    size: 9,
-    italic: true,
-    color: { argb: "FF77716A" },
-  };
-
-  const summary = [
-    ["A4", "Main orders", "A5", report.mainCount],
-    ["C4", "Dessert orders", "C5", report.dessertCount],
-    ["E4", "Combined total", "E5", report.grandTotal],
-  ];
-  summary.forEach(([labelCell, label, valueCell, value]) => {
-    sheet.getCell(labelCell).value = label;
-    sheet.getCell(labelCell).font = {
-      name: "Arial",
-      size: 9,
-      bold: true,
-      color: { argb: "FF607C58" },
-    };
-    sheet.getCell(valueCell).value = value;
-    sheet.getCell(valueCell).font = {
-      name: "Arial",
-      size: 13,
-      bold: true,
-      color: { argb: "FFC96582" },
-    };
-  });
-  sheet.getCell("E5").numFmt = '"$"#,##0.00';
-
-  const headerRow = sheet.getRow(7);
-  headerRow.values = [
-    "Category",
-    "Menu item",
-    "Dietary codes",
-    "Unit price (NZD)",
-    "Orders",
-    "Subtotal (NZD)",
-    "Ordered by",
-    "Guest dietary requirements",
-  ];
+  const headerRow = sheet.getRow(1);
   headerRow.height = 30;
   headerRow.eachCell((cell) => {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF607C58" } };
-    cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
     cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-    cell.border = { bottom: { style: "thin", color: { argb: "FFFFFFFF" } } };
+    cell.border = { bottom: { style: "medium", color: { argb: "FFFFFFFF" } } };
   });
 
-  let rowNumber = 8;
-  const sectionTotalRows = [];
-  report.sections.forEach((section) => {
-    const firstItemRow = rowNumber;
-    section.items.forEach((item) => {
-      const row = sheet.getRow(rowNumber);
-      const orderedBy = item.orders.length
-        ? item.orders.map((order) => order.name).join("\n")
-        : "No orders yet";
-      const dietaryNotes = item.orders
-        .filter((order) => order.dietaryRequirements)
-        .map((order) => `${order.name}: ${order.dietaryRequirements}`)
-        .join("\n") || "None recorded";
-
-      row.values = [
-        section.title,
-        `${item.name}\n${item.description}`,
-        item.dietaryCodes.length ? item.dietaryCodes.join(", ") : "-",
-        item.unitPrice,
-        item.quantity,
-        null,
-        orderedBy,
-        dietaryNotes,
-      ];
-      row.getCell(6).value = {
-        formula: `D${rowNumber}*E${rowNumber}`,
-        result: item.subtotal,
+  report.seatingRows.forEach((guest, index) => {
+    const row = sheet.addRow({
+      tableNumber: guest.tableNumber ?? "Unassigned",
+      name: guest.name,
+      main: guest.main,
+      dessert: guest.dessert,
+    });
+    row.height = 28;
+    row.eachCell((cell, columnNumber) => {
+      cell.font = { name: "Arial", size: 10, color: { argb: "FF4B4844" } };
+      cell.alignment = {
+        horizontal: columnNumber === 1 ? "center" : "left",
+        vertical: "middle",
+        wrapText: true,
       };
-      row.height = Math.max(44, 16 + Math.max(item.orders.length, 1) * 15);
-      row.eachCell((cell, columnNumber) => {
-        cell.font = { name: "Arial", size: 9, color: { argb: "FF4B4844" } };
-        cell.alignment = {
-          horizontal: columnNumber >= 3 && columnNumber <= 6 ? "center" : "left",
-          vertical: "top",
-          wrapText: true,
-        };
-        cell.border = { bottom: { style: "thin", color: { argb: "FFE6D7C3" } } };
-        if (rowNumber % 2 === 0) {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFBF8EF" } };
-        }
-      });
-      row.getCell(4).numFmt = '"$"#,##0.00';
-      row.getCell(5).numFmt = "#,##0";
-      row.getCell(6).numFmt = '"$"#,##0.00';
-      rowNumber += 1;
+      cell.border = { bottom: { style: "thin", color: { argb: "FFE6D7C3" } } };
+      if (index % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFBF8EF" } };
+      }
     });
-
-    const totalRow = sheet.getRow(rowNumber);
-    totalRow.getCell(2).value = `${section.title} total`;
-    totalRow.getCell(5).value = {
-      formula: `SUM(E${firstItemRow}:E${rowNumber - 1})`,
-      result: section.quantity,
-    };
-    totalRow.getCell(6).value = {
-      formula: `SUM(F${firstItemRow}:F${rowNumber - 1})`,
-      result: section.total,
-    };
-    totalRow.height = 26;
-    totalRow.eachCell((cell) => {
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF3E9" } };
-      cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF607C58" } };
-      cell.alignment = { vertical: "middle" };
-      cell.border = { bottom: { style: "medium", color: { argb: "FF607C58" } } };
-    });
-    totalRow.getCell(5).numFmt = "#,##0";
-    totalRow.getCell(6).numFmt = '"$"#,##0.00';
-    sectionTotalRows.push(rowNumber);
-    rowNumber += 1;
   });
 
-  sheet.getCell("E5").value = {
-    formula: `SUM(${sectionTotalRows.map((row) => `F${row}`).join(",")})`,
-    result: report.grandTotal,
-  };
-  sheet.autoFilter = { from: "A7", to: `H${rowNumber - 1}` };
+  sheet.autoFilter = { from: "A1", to: `D${Math.max(sheet.rowCount, 1)}` };
+  sheet.headerFooter.oddFooter = `Generated ${reportDate(report.generatedAt)}`;
 
   const buffer = await workbook.xlsx.writeBuffer();
-  if (excelCellResult(sheet.getCell("E5")) !== report.grandTotal) {
-    throw new Error("The Excel report total did not reconcile.");
-  }
   return Buffer.from(buffer);
 }
 
@@ -399,10 +285,47 @@ function buildSupabaseFoodReport(guestRows, optionRows) {
       mealChoice: choice?.main_id ? String(choice.main_id) : null,
       dessertChoice: choice?.dessert_id ? String(choice.dessert_id) : null,
       dietaryRequirements: row.dietary_requirements || "",
+      tableNumber: row.table_number === null || row.table_number === undefined
+        ? null
+        : Number(row.table_number),
     };
   });
 
-  return buildFoodReport(guests, menu);
+  const menuNames = new Map(menu.map((item) => [item.slug, item.name]));
+  const report = buildFoodReport(guests, menu);
+  report.seatingRows = guests
+    .filter((guest) => guest.status === "attending")
+    .map((guest) => ({
+      tableNumber: Number.isInteger(guest.tableNumber) ? guest.tableNumber : null,
+      name: guest.name || "Unnamed guest",
+      main: menuNames.get(guest.mealChoice) || "Not selected",
+      dessert: menuNames.get(guest.dessertChoice) || "Not selected",
+    }))
+    .sort((left, right) => {
+      if (left.tableNumber === null && right.tableNumber !== null) return 1;
+      if (left.tableNumber !== null && right.tableNumber === null) return -1;
+      if (left.tableNumber !== right.tableNumber) {
+        return (left.tableNumber || 0) - (right.tableNumber || 0);
+      }
+      return left.name.localeCompare(right.name);
+    });
+  return report;
+}
+
+async function loadAttendingGuests() {
+  const selectWithTable = "full_name,rsvp_status,dietary_requirements,table_number,guest_food_choices(main_id,dessert_id)";
+  const selectWithoutTable = "full_name,rsvp_status,dietary_requirements,guest_food_choices(main_id,dessert_id)";
+  const suffix = "&rsvp_status=eq.attending&order=full_name.asc&limit=1000";
+  try {
+    return await supabase.request(
+      `guests?select=${encodeURIComponent(selectWithTable)}${suffix}`
+    );
+  } catch (error) {
+    if (error?.code !== "PGRST204" && error?.code !== "42703") throw error;
+    return supabase.request(
+      `guests?select=${encodeURIComponent(selectWithoutTable)}${suffix}`
+    );
+  }
 }
 
 exports.handler = async (event) => {
@@ -420,19 +343,18 @@ exports.handler = async (event) => {
   }
 
   try {
-    const guestSelect = "full_name,rsvp_status,dietary_requirements,guest_food_choices(main_id,dessert_id)";
     const optionSelect = "id,course,name,description,dietary_restrictions,sort_order";
     const [guestRows, optionRows] = await Promise.all([
-      supabase.request(
-        `guests?select=${encodeURIComponent(guestSelect)}&rsvp_status=eq.attending&order=full_name.asc&limit=1000`
-      ),
+      loadAttendingGuests(),
       supabase.request(
         `food_options?select=${encodeURIComponent(optionSelect)}&is_active=eq.true&course=in.(main,dessert)&order=sort_order.asc`
       ),
     ]);
     const report = buildSupabaseFoodReport(guestRows, optionRows);
     const output = format === "pdf" ? await createPdf(report) : await createExcel(report);
-    const filename = `food-orders-${fileDate(report.generatedAt)}.${format}`;
+    const filename = format === "pdf"
+      ? `food-orders-${fileDate(report.generatedAt)}.pdf`
+      : `table-assignments-${fileDate(report.generatedAt)}.xlsx`;
 
     return {
       statusCode: 200,

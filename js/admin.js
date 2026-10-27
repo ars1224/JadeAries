@@ -677,7 +677,7 @@ async function loadGuests() {
 function reportFilename(response, format) {
     const disposition = response.headers.get("Content-Disposition") || "";
     const match = disposition.match(/filename="?([^";]+)"?/i);
-    return match?.[1] || `food-orders.${format}`;
+    return match?.[1] || (format === "xlsx" ? "table-assignments.xlsx" : "food-orders.pdf");
 }
 
 function saveBlob(blob, filename) {
@@ -731,7 +731,9 @@ async function downloadFoodReport(format, button) {
         const blob = await response.blob();
         await assertDownloadBlob(blob, format);
         saveBlob(blob, reportFilename(response, format));
-        showMessage(`${format === "pdf" ? "PDF" : "Excel"} food report downloaded.`);
+        showMessage(format === "pdf"
+            ? "PDF food report downloaded."
+            : "Excel seating list downloaded.");
     } catch (error) {
         showMessage(error.message, true);
     } finally {

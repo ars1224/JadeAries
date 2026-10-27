@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const ExcelJS = require("exceljs/dist/exceljs.min.js");
 
 process.env.SUPABASE_URL = "https://example.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
@@ -578,12 +579,14 @@ test("Supabase catering export uses current food names and accurate selection to
   const report = buildSupabaseFoodReport([
     {
       full_name: "Guest One",
+      table_number: 10,
       rsvp_status: "attending",
       dietary_requirements: "Gluten free",
       guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
     },
     {
       full_name: "Guest Two",
+      table_number: 2,
       rsvp_status: "attending",
       dietary_requirements: "",
       guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
@@ -601,6 +604,10 @@ test("Supabase catering export uses current food names and accurate selection to
   assert.deepEqual(report.sections[0].items[0].dietaryCodes, ["D", "DO"]);
   assert.equal(report.sections[1].items[0].name, "Classic Tiramisu");
   assert.equal(report.sections[0].items[0].orders[0].dietaryRequirements, "Gluten free");
+  assert.deepEqual(report.seatingRows.map(({ tableNumber, name }) => ({ tableNumber, name })), [
+    { tableNumber: 2, name: "Guest Two" },
+    { tableNumber: 10, name: "Guest One" },
+  ]);
 });
 
 test("Supabase catering report produces valid PDF and Excel files when dietary codes are strings", async () => {
@@ -626,6 +633,35 @@ test("Supabase catering report produces valid PDF and Excel files when dietary c
   assert.equal(excel.subarray(0, 2).toString(), "PK");
   assert.ok(pdf.length > 1_000);
   assert.ok(excel.length > 1_000);
+});
+
+test("Excel export has Table, Name, Main, Dessert columns sorted by table then name", async () => {
+  const { buildSupabaseFoodReport, createExcel } = require("../netlify/functions/exportFoodReport");
+  const choice = [{ main_id: "main-1", dessert_id: "dessert-1" }];
+  const report = buildSupabaseFoodReport([
+    { full_name: "Zara Guest", table_number: 10, rsvp_status: "attending", guest_food_choices: choice },
+    { full_name: "Ben Guest", table_number: 2, rsvp_status: "attending", guest_food_choices: choice },
+    { full_name: "Amy Guest", table_number: 2, rsvp_status: "attending", guest_food_choices: choice },
+    { full_name: "Una Guest", table_number: null, rsvp_status: "attending", guest_food_choices: choice },
+  ], [
+    { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g" },
+    { id: "dessert-1", course: "dessert", name: "Classic Tiramisu" },
+  ]);
+  const output = await createExcel(report);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(output);
+  const sheet = workbook.getWorksheet("Table assignments");
+
+  assert.deepEqual(sheet.getRow(1).values.slice(1), ["Table #", "Name", "Main", "Dessert"]);
+  assert.deepEqual(
+    [2, 3, 4, 5].map((rowNumber) => sheet.getRow(rowNumber).values.slice(1)),
+    [
+      [2, "Amy Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
+      [2, "Ben Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
+      [10, "Zara Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
+      ["Unassigned", "Una Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
+    ]
+  );
 });
 
 test("authenticated catering export handler returns downloadable PDF and Excel responses", async () => {
@@ -656,8 +692,45 @@ test("authenticated catering export handler returns downloadable PDF and Excel r
     assert.equal(response.statusCode, 200);
     assert.equal(response.isBase64Encoded, true);
     assert.equal(response.headers["Content-Type"], contentType);
+    assert.match(
+      response.headers["Content-Disposition"],
+      format === "xlsx" ? /table-assignments-.*\.xlsx/ : /food-orders-.*\.pdf/
+    );
     assert.equal(output.subarray(0, signature.length).toString(), signature);
   }
+});
+
+test("Excel export remains available before the table assignment migration is installed", async () => {
+  let guestCalls = 0;
+  const handler = loadHandler("../netlify/functions/exportFoodReport", async (requestPath) => {
+    if (requestPath.startsWith("guests?")) {
+      guestCalls += 1;
+      if (requestPath.includes("table_number")) {
+        throw new SupabaseRequestError(
+          400,
+          "PGRST204",
+          "Could not find the 'table_number' column of 'guests' in the schema cache"
+        );
+      }
+      return [{
+        full_name: "Guest One",
+        rsvp_status: "attending",
+        guest_food_choices: [{ main_id: "main-1", dessert_id: "dessert-1" }],
+      }];
+    }
+    return [
+      { id: "main-1", course: "main", name: "Roasted Beef Fillet" },
+      { id: "dessert-1", course: "dessert", name: "Classic Tiramisu" },
+    ];
+  });
+  const response = await handler({
+    httpMethod: "GET",
+    headers: adminHeaders(),
+    queryStringParameters: { format: "xlsx" },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(guestCalls, 2);
+  assert.match(response.headers["Content-Disposition"], /table-assignments-.*\.xlsx/);
 });
 
 test("Netlify export uses the self-contained ExcelJS build and includes PDF font data", () => {
