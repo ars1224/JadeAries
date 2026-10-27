@@ -635,14 +635,14 @@ test("Supabase catering report produces valid PDF and Excel files when dietary c
   assert.ok(excel.length > 1_000);
 });
 
-test("Excel export has Table, Name, Main, Dessert columns sorted by table then name", async () => {
+test("Excel export has seating, meal, and dietary columns sorted by table then name", async () => {
   const { buildSupabaseFoodReport, createExcel } = require("../netlify/functions/exportFoodReport");
   const choice = [{ main_id: "main-1", dessert_id: "dessert-1" }];
   const report = buildSupabaseFoodReport([
-    { full_name: "Zara Guest", table_number: 10, rsvp_status: "attending", guest_food_choices: choice },
-    { full_name: "Ben Guest", table_number: 2, rsvp_status: "attending", guest_food_choices: choice },
-    { full_name: "Amy Guest", table_number: 2, rsvp_status: "attending", guest_food_choices: choice },
-    { full_name: "Una Guest", table_number: null, rsvp_status: "attending", guest_food_choices: choice },
+    { full_name: "Zara Guest", table_number: 10, rsvp_status: "attending", dietary_requirements: "Gluten free", guest_food_choices: choice },
+    { full_name: "Ben Guest", table_number: 2, rsvp_status: "attending", dietary_requirements: "", guest_food_choices: choice },
+    { full_name: "Amy Guest", table_number: 2, rsvp_status: "attending", dietary_requirements: "Nut allergy", guest_food_choices: choice },
+    { full_name: "Una Guest", table_number: null, rsvp_status: "attending", dietary_requirements: null, guest_food_choices: choice },
   ], [
     { id: "main-1", course: "main", name: "Roasted Beef Fillet – 180g" },
     { id: "dessert-1", course: "dessert", name: "Classic Tiramisu" },
@@ -652,14 +652,20 @@ test("Excel export has Table, Name, Main, Dessert columns sorted by table then n
   await workbook.xlsx.load(output);
   const sheet = workbook.getWorksheet("Table assignments");
 
-  assert.deepEqual(sheet.getRow(1).values.slice(1), ["Table #", "Name", "Main", "Dessert"]);
+  assert.deepEqual(sheet.getRow(1).values.slice(1), [
+    "Table #",
+    "Name",
+    "Main",
+    "Dessert",
+    "Dietary Requirements",
+  ]);
   assert.deepEqual(
     [2, 3, 4, 5].map((rowNumber) => sheet.getRow(rowNumber).values.slice(1)),
     [
-      [2, "Amy Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
-      [2, "Ben Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
-      [10, "Zara Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
-      ["Unassigned", "Una Guest", "Roasted Beef Fillet", "Classic Tiramisu"],
+      [2, "Amy Guest", "Roasted Beef Fillet", "Classic Tiramisu", "Nut allergy"],
+      [2, "Ben Guest", "Roasted Beef Fillet", "Classic Tiramisu", "None"],
+      [10, "Zara Guest", "Roasted Beef Fillet", "Classic Tiramisu", "Gluten free"],
+      ["Unassigned", "Una Guest", "Roasted Beef Fillet", "Classic Tiramisu", "None"],
     ]
   );
 });

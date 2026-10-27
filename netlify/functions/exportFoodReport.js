@@ -69,6 +69,7 @@ async function createExcel(report) {
     { header: "Name", key: "name", width: 34 },
     { header: "Main", key: "main", width: 48 },
     { header: "Dessert", key: "dessert", width: 38 },
+    { header: "Dietary Requirements", key: "dietaryRequirements", width: 42 },
   ];
 
   const headerRow = sheet.getRow(1);
@@ -86,6 +87,7 @@ async function createExcel(report) {
       name: guest.name,
       main: guest.main,
       dessert: guest.dessert,
+      dietaryRequirements: guest.dietaryRequirements || "None",
     });
     row.height = 28;
     row.eachCell((cell, columnNumber) => {
@@ -102,7 +104,7 @@ async function createExcel(report) {
     });
   });
 
-  sheet.autoFilter = { from: "A1", to: `D${Math.max(sheet.rowCount, 1)}` };
+  sheet.autoFilter = { from: "A1", to: `E${Math.max(sheet.rowCount, 1)}` };
   sheet.headerFooter.oddFooter = `Generated ${reportDate(report.generatedAt)}`;
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -300,6 +302,7 @@ function buildSupabaseFoodReport(guestRows, optionRows) {
       name: guest.name || "Unnamed guest",
       main: menuNames.get(guest.mealChoice) || "Not selected",
       dessert: menuNames.get(guest.dessertChoice) || "Not selected",
+      dietaryRequirements: guest.dietaryRequirements || "",
     }))
     .sort((left, right) => {
       if (left.tableNumber === null && right.tableNumber !== null) return 1;
